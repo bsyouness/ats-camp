@@ -4,12 +4,12 @@ import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey: "AIzaSyCou1VPHwl3IT-k3MIBj2iPHJRwwh5hdf4",
+  authDomain: "ats-camp.firebaseapp.com",
+  projectId: "ats-camp",
+  storageBucket: "ats-camp.firebasestorage.app",
+  messagingSenderId: "864549858914",
+  appId: "1:864549858914:web:f32531851dd5aaca6b6b3b"
 };
 
 const app = initializeApp(firebaseConfig);
