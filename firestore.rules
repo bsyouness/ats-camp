@@ -1,0 +1,95 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Users collection
+    match /users/{userId} {
+      // Anyone authenticated can read all users (for member directory)
+      allow read: if isAuthenticated();
+
+      // Users can create their own document during registration
+      allow create: if isOwner(userId);
+
+      // Users can update their own profile fields (but not role)
+      allow update: if isOwner(userId) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']));
+
+      // Admins can update any user (including role)
+      allow update: if isAdmin();
+
+      // No one can delete users
+      allow delete: if false;
+    }
+
+    // Shifts collection
+    match /shifts/{shiftId} {
+      // Authenticated users can read shifts
+      allow read: if isAuthenticated();
+
+      // Only admins can create/delete shifts
+      allow create, delete: if isAdmin();
+
+      // Admins can update anything, members can only update slots (for sign-up)
+      allow update: if isAdmin() || (isAuthenticated() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['slots']));
+    }
+
+    // Camp Maps collection
+    match /campMaps/{year} {
+      // Authenticated users can read maps
+      allow read: if isAuthenticated();
+
+      // Only admins can create/update/delete maps
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Media collection
+    match /media/{mediaId} {
+      // Authenticated users can read all media
+      allow read: if isAuthenticated();
+
+      // Authenticated users can create media
+      allow create: if isAuthenticated() &&
+        request.resource.data.uploadedBy == request.auth.uid;
+
+      // Users can delete their own media, admins can delete any
+      allow delete: if isAdmin() ||
+        (isAuthenticated() && resource.data.uploadedBy == request.auth.uid);
+
+      // No updates to media (immutable once created)
+      allow update: if false;
+    }
+
+    // Contacts collection (contact forms, whatsapp requests, issue reports)
+    match /contacts/{contactId} {
+      // Anyone can create contact submissions (even unauthenticated)
+      allow create: if true;
+
+      // Only admins can read, update, delete
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Site config
+    match /config/{configId} {
+      // Anyone can read config (for public pages)
+      allow read: if true;
+
+      // Only admins can update config
+      allow write: if isAdmin();
+    }
+  }
+}
