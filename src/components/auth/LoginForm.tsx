@@ -1,8 +1,10 @@
 import { useState, FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { signIn } from '../../services/auth';
+import { signIn, signInWithHubId } from '../../services/auth';
 import { Button, Input } from '../ui';
 import { GoogleSignInButton } from './GoogleSignInButton';
+
+type LoginMethod = 'email' | 'hubid';
 
 interface LoginFormProps {
   onSuccess?: () => void;
@@ -13,6 +15,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [loginMethod, setLoginMethod] = useState<LoginMethod>('email');
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -20,7 +23,11 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
     setIsLoading(true);
 
     try {
-      await signIn(email, password);
+      if (loginMethod === 'hubid') {
+        await signInWithHubId(email, password);
+      } else {
+        await signIn(email, password);
+      }
       onSuccess?.();
     } catch (err) {
       setError('Invalid email or password');
@@ -47,8 +54,34 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
             <div className="w-full border-t border-playa-border" />
           </div>
           <div className="relative flex justify-center text-sm">
-            <span className="px-4 bg-playa-surface text-gray-500">or continue with email</span>
+            <span className="px-4 bg-playa-surface text-gray-500">or continue with</span>
           </div>
+        </div>
+
+        {/* Login Method Tabs */}
+        <div className="flex mb-6 bg-playa-card rounded-lg p-1">
+          <button
+            type="button"
+            onClick={() => setLoginMethod('email')}
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+              loginMethod === 'email'
+                ? 'bg-neon-orange text-white'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            Email
+          </button>
+          <button
+            type="button"
+            onClick={() => setLoginMethod('hubid')}
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+              loginMethod === 'hubid'
+                ? 'bg-neon-purple text-white'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            Hub Culture
+          </button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -75,7 +108,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
           )}
 
           <Button type="submit" className="w-full" isLoading={isLoading}>
-            Sign In
+            {loginMethod === 'hubid' ? 'Sign In with Hub Culture' : 'Sign In'}
           </Button>
         </form>
 
