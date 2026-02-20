@@ -3,7 +3,9 @@ import { getAllShifts, createShift, updateShift, deleteShift } from '../../servi
 import { getAllUsers } from '../../services/users';
 import { useAuth } from '../../contexts/AuthContext';
 import { Shift, ShiftSlot, User } from '../../types';
-import { Card, CardContent, Button, Input, Loading, Modal } from '../../components/ui';
+import { Button, Input, Loading, Modal } from '../../components/ui';
+import { ShiftCalendar } from '../../components/shifts/ShiftCalendar';
+import { ShiftRequestQueue } from '../../components/shifts/ShiftRequestQueue';
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
@@ -15,6 +17,7 @@ export function ShiftManagementPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingShift, setEditingShift] = useState<Shift | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Shift | null>(null);
 
   // Form state
   const [title, setTitle] = useState('');
@@ -31,10 +34,7 @@ export function ShiftManagementPage() {
 
   async function fetchData() {
     try {
-      const [shiftsData, usersData] = await Promise.all([
-        getAllShifts(),
-        getAllUsers(),
-      ]);
+      const [shiftsData, usersData] = await Promise.all([getAllShifts(), getAllUsers()]);
       setShifts(shiftsData);
       setUsers(usersData);
     } catch (error) {
@@ -55,8 +55,17 @@ export function ShiftManagementPage() {
     setEditingShift(null);
   };
 
-  const openCreateModal = () => {
+  const openCreateModal = (clickDate?: Date, hour?: number) => {
     resetForm();
+    if (clickDate) {
+      setDate(clickDate.toISOString().split('T')[0]);
+    }
+    if (hour !== undefined) {
+      const h = hour.toString().padStart(2, '0');
+      setStartTime(`${h}:00`);
+      const endH = ((hour + 2) % 24).toString().padStart(2, '0');
+      setEndTime(`${endH}:00`);
+    }
     setShowModal(true);
   };
 
@@ -64,8 +73,8 @@ export function ShiftManagementPage() {
     setEditingShift(shift);
     setTitle(shift.title);
     setDescription(shift.description);
-    const shiftDate = shift.date as unknown as { toDate: () => Date };
-    setDate(shiftDate.toDate().toISOString().split('T')[0]);
+    const shiftDate = (shift.date as unknown as { toDate: () => Date }).toDate();
+    setDate(shiftDate.toISOString().split('T')[0]);
     setStartTime(shift.startTime);
     setEndTime(shift.endTime);
     setLocation(shift.location);
@@ -82,30 +91,20 @@ export function ShiftManagementPage() {
   };
 
   const updateSlotAssignment = (slotId: string, userId: string | null) => {
-    setSlots(
-      slots.map((s) => (s.id === slotId ? { ...s, assignedTo: userId } : s))
-    );
+    setSlots(slots.map((s) => (s.id === slotId ? { ...s, assignedTo: userId } : s)));
   };
 
   const handleSave = async () => {
     if (!firebaseUser) return;
     setSaving(true);
-
     try {
       if (editingShift) {
-        await updateShift(editingShift.id, {
-          title,
-          description,
-          startTime,
-          endTime,
-          location,
-          slots,
-        });
+        await updateShift(editingShift.id, { title, description, startTime, endTime, location, slots });
       } else {
         await createShift({
           title,
           description,
-          date: new Date(date),
+          date: new Date(date + 'T12:00:00'),
           startTime,
           endTime,
           location,
@@ -124,24 +123,16 @@ export function ShiftManagementPage() {
     }
   };
 
-  const handleDelete = async (shiftId: string) => {
-    if (!confirm('Are you sure you want to delete this shift?')) return;
-
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await deleteShift(shiftId);
+      await deleteShift(deleteTarget.id);
+      setDeleteTarget(null);
       await fetchData();
     } catch (error) {
       console.error('Error deleting shift:', error);
       alert('Failed to delete shift');
     }
-  };
-
-  const formatDate = (timestamp: { toDate: () => Date }) => {
-    return timestamp.toDate().toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    });
   };
 
   const getUserByUid = (uid: string | null) => {
@@ -158,59 +149,31 @@ export function ShiftManagementPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold text-white mb-2">Shift Management</h1>
-          <p className="text-gray-400">Create and manage camp shifts</p>
+          <p className="text-gray-400">Click a shift to edit · Click an empty time slot to create</p>
         </div>
-        <Button onClick={openCreateModal}>Create Shift</Button>
+        <Button onClick={() => openCreateModal()}>+ Create Shift</Button>
       </div>
 
-      {shifts.length === 0 ? (
-        <Card>
-          <CardContent className="text-center py-12">
-            <p className="text-gray-400">No shifts created yet.</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          {shifts.map((shift) => (
-            <Card key={shift.id}>
-              <CardContent>
-                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-xl font-semibold text-white">{shift.title}</h3>
-                      <span className="px-2 py-0.5 bg-playa-surface text-gray-400 text-xs rounded">
-                        {shift.slots.filter((s) => s.assignedTo).length}/{shift.slots.length} filled
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-4 text-sm text-gray-400 mb-2">
-                      <span>{formatDate(shift.date as { toDate: () => Date })}</span>
-                      <span>{shift.startTime} - {shift.endTime}</span>
-                      {shift.location && <span>{shift.location}</span>}
-                    </div>
-                    {shift.description && (
-                      <p className="text-gray-500 text-sm">{shift.description}</p>
-                    )}
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="secondary" size="sm" onClick={() => openEditModal(shift)}>
-                      Edit
-                    </Button>
-                    <Button variant="danger" size="sm" onClick={() => handleDelete(shift.id)}>
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+      {/* Calendar */}
+      <div className="bg-playa-card border border-playa-border rounded-xl p-6 mb-6">
+        <ShiftCalendar
+          shifts={shifts}
+          users={users}
+          myUid={firebaseUser?.uid ?? null}
+          isAdmin={true}
+          onShiftClick={openEditModal}
+          onEmptyCellClick={openCreateModal}
+        />
+      </div>
 
-      {/* Create/Edit Modal */}
+      {/* Shift Request Queue */}
+      <ShiftRequestQueue shifts={shifts} users={users} onRequestResolved={fetchData} />
+
+      {/* Create / Edit Modal */}
       <Modal
         isOpen={showModal}
         onClose={() => { setShowModal(false); resetForm(); }}
@@ -227,9 +190,7 @@ export function ShiftManagementPage() {
           />
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1.5">
-              Description
-            </label>
+            <label className="block text-sm font-medium text-gray-300 mb-1.5">Description</label>
             <textarea
               className="w-full px-4 py-2.5 bg-playa-card border border-playa-border rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:border-neon-cyan resize-y min-h-[80px]"
               placeholder="Describe the shift duties..."
@@ -277,15 +238,11 @@ export function ShiftManagementPage() {
             <div className="flex items-center justify-between mb-2">
               <label className="text-sm font-medium text-gray-300">Slots</label>
               <div className="flex gap-2">
-                <Button variant="ghost" size="sm" onClick={() => addSlot(false)}>
-                  + Open Slot
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => addSlot(true)}>
-                  + Pre-assigned Slot
-                </Button>
+                <Button variant="ghost" size="sm" onClick={() => addSlot(false)}>+ Open Slot</Button>
+                <Button variant="ghost" size="sm" onClick={() => addSlot(true)}>+ Pre-assigned</Button>
               </div>
             </div>
-            <div className="space-y-2 max-h-40 overflow-y-auto">
+            <div className="space-y-2 max-h-48 overflow-y-auto">
               {slots.map((slot, index) => (
                 <div key={slot.id} className="flex items-center gap-2 p-2 bg-playa-surface rounded">
                   <span className="text-gray-500 text-sm w-8">#{index + 1}</span>
@@ -308,10 +265,7 @@ export function ShiftManagementPage() {
                   <span className={`px-2 py-0.5 text-xs rounded ${slot.preAssigned ? 'bg-neon-purple/20 text-neon-purple' : 'bg-neon-cyan/20 text-neon-cyan'}`}>
                     {slot.preAssigned ? 'Pre-assigned' : 'Open'}
                   </span>
-                  <button
-                    onClick={() => removeSlot(slot.id)}
-                    className="text-gray-500 hover:text-red-400"
-                  >
+                  <button onClick={() => removeSlot(slot.id)} className="text-gray-500 hover:text-red-400">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
@@ -319,20 +273,52 @@ export function ShiftManagementPage() {
                 </div>
               ))}
               {slots.length === 0 && (
-                <p className="text-gray-500 text-sm text-center py-2">
-                  Add slots for people to sign up
-                </p>
+                <p className="text-gray-500 text-sm text-center py-2">Add slots for people to sign up</p>
               )}
             </div>
           </div>
 
-          <div className="flex gap-3 justify-end pt-4">
-            <Button variant="secondary" onClick={() => { setShowModal(false); resetForm(); }}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave} isLoading={saving} disabled={!title || !date || !startTime || !endTime}>
-              {editingShift ? 'Save Changes' : 'Create Shift'}
-            </Button>
+          <div className="flex gap-3 justify-between pt-4">
+            {editingShift && (
+              <Button
+                variant="danger"
+                onClick={() => { setShowModal(false); setDeleteTarget(editingShift); }}
+              >
+                Delete Shift
+              </Button>
+            )}
+            <div className="flex gap-3 ml-auto">
+              <Button variant="secondary" onClick={() => { setShowModal(false); resetForm(); }}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSave}
+                isLoading={saving}
+                disabled={!title || !date || !startTime || !endTime}
+              >
+                {editingShift ? 'Save Changes' : 'Create Shift'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete confirmation */}
+      <Modal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Shift"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-gray-400">
+            Are you sure you want to delete{' '}
+            <span className="text-white font-medium">"{deleteTarget?.title}"</span>?
+            This cannot be undone.
+          </p>
+          <div className="flex gap-3 justify-end">
+            <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button variant="danger" onClick={handleDelete}>Delete</Button>
           </div>
         </div>
       </Modal>
