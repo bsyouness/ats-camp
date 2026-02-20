@@ -1,13 +1,250 @@
-import { useState, FormEvent, useEffect } from 'react';
+import { useState, FormEvent, useEffect, useRef } from 'react';
+import { updateProfile } from 'firebase/auth';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useAuth } from '../../contexts/AuthContext';
 import { updateUser } from '../../services/users';
-import { Button, Input, Card, CardContent, CardHeader, CardTitle } from '../../components/ui';
+import { getMyMedia, compressImage } from '../../services/media';
+import { storage } from '../../services/firebase';
+import { Button, Input, Card, CardContent, CardHeader, CardTitle, Loading, Modal } from '../../components/ui';
+import { Media } from '../../types';
+
+// ── Avatar component ──────────────────────────────────────────────────────────
+
+function Avatar({
+  photoURL,
+  displayName,
+  onEditClick,
+}: {
+  photoURL: string | null;
+  displayName: string;
+  onEditClick: () => void;
+}) {
+  const initial = (displayName || '?').charAt(0).toUpperCase();
+
+  return (
+    <div className="relative w-24 h-24 mx-auto">
+      {photoURL ? (
+        <img
+          src={photoURL}
+          alt={displayName}
+          className="w-24 h-24 rounded-full object-cover border-2 border-playa-border"
+        />
+      ) : (
+        <div className="w-24 h-24 rounded-full bg-playa-card border-2 border-playa-border flex items-center justify-center">
+          <span className="text-3xl font-semibold text-gray-200">{initial}</span>
+        </div>
+      )}
+
+      {/* Edit button */}
+      <button
+        type="button"
+        onClick={onEditClick}
+        className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-playa-surface border border-playa-border flex items-center justify-center text-gray-400 hover:text-white hover:border-neon-cyan transition-colors shadow-lg"
+        title="Change photo"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H7v-3.414a2 2 0 01.586-1.414z" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+// ── Photo picker modal ────────────────────────────────────────────────────────
+
+function PhotoPickerModal({
+  isOpen,
+  onClose,
+  uid,
+  onSave,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  uid: string;
+  onSave: (url: string) => Promise<void>;
+}) {
+  const [tab, setTab] = useState<'upload' | 'gallery'>('upload');
+  const [galleryMedia, setGalleryMedia] = useState<Media[]>([]);
+  const [galleryLoading, setGalleryLoading] = useState(false);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load gallery when switching to that tab
+  useEffect(() => {
+    if (tab === 'gallery' && galleryMedia.length === 0) {
+      setGalleryLoading(true);
+      getMyMedia(uid)
+        .then((items) => setGalleryMedia(items.filter((m) => m.type === 'photo')))
+        .catch(console.error)
+        .finally(() => setGalleryLoading(false));
+    }
+  }, [tab, uid, galleryMedia.length]);
+
+  function handleClose() {
+    setPreview(null);
+    setPendingFile(null);
+    setTab('upload');
+    onClose();
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPendingFile(file);
+    setPreview(URL.createObjectURL(file));
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  async function handleUploadConfirm() {
+    if (!pendingFile) return;
+    setSaving(true);
+    try {
+      const compressed = await compressImage(pendingFile);
+      const storageRef = ref(storage, `avatars/${uid}.jpg`);
+      await uploadBytes(storageRef, compressed, { contentType: 'image/jpeg' });
+      const url = await getDownloadURL(storageRef);
+      await onSave(url);
+      handleClose();
+    } catch (err) {
+      console.error('Avatar upload failed:', err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleGallerySelect(url: string) {
+    setSaving(true);
+    try {
+      await onSave(url);
+      handleClose();
+    } catch (err) {
+      console.error('Avatar update failed:', err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={handleClose} title="Change profile photo" size="md">
+      {/* Tabs */}
+      <div className="flex gap-1 mb-5 p-1 bg-playa-card rounded-lg">
+        {(['upload', 'gallery'] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={`flex-1 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              tab === t
+                ? 'bg-playa-surface text-white'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            {t === 'upload' ? 'Upload new' : 'From gallery'}
+          </button>
+        ))}
+      </div>
+
+      {/* Upload tab */}
+      {tab === 'upload' && (
+        <div className="flex flex-col items-center gap-4">
+          {preview ? (
+            <img
+              src={preview}
+              alt="Preview"
+              className="w-32 h-32 rounded-full object-cover border-2 border-playa-border"
+            />
+          ) : (
+            <div className="w-32 h-32 rounded-full bg-playa-card border-2 border-dashed border-playa-border flex items-center justify-center text-gray-500">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </div>
+          )}
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+
+          <Button
+            variant="ghost"
+            size="sm"
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {preview ? 'Choose different photo' : 'Choose photo'}
+          </Button>
+
+          {preview && (
+            <Button
+              type="button"
+              onClick={handleUploadConfirm}
+              isLoading={saving}
+              className="w-full"
+            >
+              {saving ? 'Saving...' : 'Set as profile photo'}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Gallery tab */}
+      {tab === 'gallery' && (
+        <div>
+          {galleryLoading ? (
+            <div className="flex justify-center py-8">
+              <Loading size="md" />
+            </div>
+          ) : galleryMedia.length === 0 ? (
+            <p className="text-center text-gray-400 py-8 text-sm">
+              No photos uploaded yet. Upload one from the Media page first.
+            </p>
+          ) : (
+            <div className="grid grid-cols-3 gap-2 max-h-72 overflow-y-auto pr-1">
+              {galleryMedia.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => handleGallerySelect(item.url)}
+                  disabled={saving}
+                  className="aspect-square rounded-lg overflow-hidden border-2 border-transparent hover:border-neon-cyan transition-colors focus:outline-none focus:border-neon-cyan disabled:opacity-50"
+                >
+                  <img
+                    src={item.url}
+                    alt={item.description || 'Gallery photo'}
+                    className="w-full h-full object-cover"
+                  />
+                </button>
+              ))}
+            </div>
+          )}
+          {saving && (
+            <div className="flex justify-center pt-4">
+              <Loading size="sm" />
+            </div>
+          )}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 
 export function MyProfilePage() {
   const { user, firebaseUser } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+  const [showPhotoPicker, setShowPhotoPicker] = useState(false);
+  const [currentPhotoURL, setCurrentPhotoURL] = useState<string | null>(null);
 
   const [displayName, setDisplayName] = useState('');
   const [playaName, setPlayaName] = useState('');
@@ -26,8 +263,16 @@ export function MyProfilePage() {
       setContactEmail(user.contactInfo?.email || '');
       setContactPhone(user.contactInfo?.phone || '');
       setYearsAttended(user.yearsAttended?.join(', ') || '');
+      setCurrentPhotoURL(user.photoURL || firebaseUser?.photoURL || null);
     }
-  }, [user]);
+  }, [user, firebaseUser]);
+
+  async function handlePhotoSave(url: string) {
+    if (!firebaseUser) return;
+    await updateUser(firebaseUser.uid, { photoURL: url });
+    await updateProfile(firebaseUser, { photoURL: url });
+    setCurrentPhotoURL(url);
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -60,6 +305,8 @@ export function MyProfilePage() {
         yearsAttended: yearsArray,
       });
 
+      await updateProfile(firebaseUser, { displayName });
+
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
@@ -74,6 +321,16 @@ export function MyProfilePage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-white mb-2">My Profile</h1>
         <p className="text-gray-400">Update your camp profile information</p>
+      </div>
+
+      {/* Avatar */}
+      <div className="flex flex-col items-center mb-8 gap-2">
+        <Avatar
+          photoURL={currentPhotoURL}
+          displayName={displayName || firebaseUser?.displayName || ''}
+          onEditClick={() => setShowPhotoPicker(true)}
+        />
+        <span className="text-xs text-gray-500">Click the pencil to change your photo</span>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -179,6 +436,15 @@ export function MyProfilePage() {
           </Button>
         </div>
       </form>
+
+      {firebaseUser && (
+        <PhotoPickerModal
+          isOpen={showPhotoPicker}
+          onClose={() => setShowPhotoPicker(false)}
+          uid={firebaseUser.uid}
+          onSave={handlePhotoSave}
+        />
+      )}
     </div>
   );
 }

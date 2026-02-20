@@ -64,16 +64,16 @@ export function Header() {
             {firebaseUser ? (
               <div className="flex items-center gap-3">
                 <Link to="/profile" className="flex items-center gap-2 text-gray-400 hover:text-white">
-                  {user?.photoURL ? (
+                  {(user?.photoURL || firebaseUser?.photoURL) ? (
                     <img
-                      src={user.photoURL}
-                      alt={user.displayName}
-                      className="w-8 h-8 rounded-full"
+                      src={(user?.photoURL || firebaseUser?.photoURL)!}
+                      alt={user?.displayName || firebaseUser?.displayName || 'Profile'}
+                      className="w-8 h-8 rounded-full object-cover"
                     />
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-playa-card flex items-center justify-center">
-                      <span className="text-sm font-medium">
-                        {user?.displayName?.charAt(0).toUpperCase()}
+                    <div className="w-8 h-8 rounded-full bg-playa-card border border-playa-border flex items-center justify-center">
+                      <span className="text-sm font-medium text-gray-300">
+                        {(user?.displayName || firebaseUser?.displayName || firebaseUser?.email || '?').charAt(0).toUpperCase()}
                       </span>
                     </div>
                   )}

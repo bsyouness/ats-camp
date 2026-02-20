@@ -23,3 +23,7 @@ deploy-rules:
 # Build and deploy Cloud Functions
 deploy-functions:
 	cd functions && npm run build && firebase deploy --only functions --project ats-camp
+
+# Promote a user to admin by email. Usage: make make-admin EMAIL=user@example.com
+make-admin:
+	GOOGLE_APPLICATION_CREDENTIALS=$(GOOGLE_APPLICATION_CREDENTIALS) node scripts/make-admin.cjs $(EMAIL)
