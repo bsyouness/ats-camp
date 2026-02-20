@@ -9,6 +9,8 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   isAdmin: boolean;
+  previewAsUser: boolean;
+  setPreviewAsUser: (v: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -17,6 +19,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [previewAsUser, setPreviewAsUserState] = useState<boolean>(
+    () => sessionStorage.getItem('previewAsUser') === 'true',
+  );
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
@@ -40,11 +45,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, []);
 
+  function setPreviewAsUser(v: boolean) {
+    sessionStorage.setItem('previewAsUser', String(v));
+    setPreviewAsUserState(v);
+  }
+
   const value: AuthContextType = {
     firebaseUser,
     user,
     loading,
-    isAdmin: user?.role === 'admin',
+    isAdmin: user?.role === 'admin' && !previewAsUser,
+    previewAsUser,
+    setPreviewAsUser,
   };
 
   return (

@@ -19,3 +19,7 @@ deploy: build
 # Deploy Firestore rules only (no rebuild needed)
 deploy-rules:
 	firebase deploy --only firestore:rules --project ats-camp
+
+# Build and deploy Cloud Functions
+deploy-functions:
+	cd functions && npm run build && firebase deploy --only functions --project ats-camp

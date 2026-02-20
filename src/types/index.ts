@@ -63,6 +63,9 @@ export interface Media {
   uploadedAt: Timestamp;
   year: number;
   description: string;
+  expiresAt: Timestamp;
+  compressed: boolean;
+  remindersSent: string[];
 }
 
 export interface ContactSubmission {

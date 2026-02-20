@@ -4,13 +4,46 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Media } from '../../types';
 import { Card, CardContent, Button, Loading, Modal } from '../../components/ui';
 
+function daysUntil(ts: { toMillis: () => number }): number {
+  const ms = ts.toMillis() - Date.now();
+  return Math.ceil(ms / (1000 * 60 * 60 * 24));
+}
+
+function ExpiryBadge({ expiresAt }: { expiresAt: Media['expiresAt'] }) {
+  const days = daysUntil(expiresAt);
+
+  if (days <= 2) {
+    return (
+      <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-600 text-white">
+        Expires soon!
+      </span>
+    );
+  }
+  if (days <= 30) {
+    return (
+      <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-500 text-white animate-pulse">
+        Expires in {days}d
+      </span>
+    );
+  }
+  return (
+    <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full text-xs bg-black/50 text-gray-300">
+      Expires in {days}d
+    </span>
+  );
+}
+
 export function MediaPage() {
   const { firebaseUser, isAdmin } = useAuth();
   const [media, setMedia] = useState<Media[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [compressing, setCompressing] = useState(false);
   const [selectedMedia, setSelectedMedia] = useState<Media | null>(null);
   const [filterYear, setFilterYear] = useState<number | 'all'>('all');
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [description, setDescription] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -28,7 +61,7 @@ export function MediaPage() {
     }
   }
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !firebaseUser) return;
 
@@ -38,12 +71,26 @@ export function MediaPage() {
       return;
     }
 
+    setPendingFile(file);
+    setDescription('');
+    setShowUploadDialog(true);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleUploadConfirm = async () => {
+    if (!pendingFile || !firebaseUser) return;
+
+    const mediaType = getMediaType(pendingFile)!;
+    setShowUploadDialog(false);
+
+    if (mediaType === 'photo') setCompressing(true);
     setUploading(true);
+
     try {
       await uploadMedia({
-        file,
+        file: pendingFile,
         type: mediaType,
-        description: '',
+        description,
         year: new Date().getFullYear(),
         uploadedBy: firebaseUser.uid,
       });
@@ -53,9 +100,9 @@ export function MediaPage() {
       alert('Failed to upload media');
     } finally {
       setUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      setCompressing(false);
+      setPendingFile(null);
+      setDescription('');
     }
   };
 
@@ -88,6 +135,11 @@ export function MediaPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      {/* Expiry info banner */}
+      <div className="mb-6 px-4 py-3 rounded-lg bg-playa-card border border-playa-border text-sm text-gray-300">
+        Media is automatically removed 365 days after upload. You'll receive email reminders 30 and 2 days before expiry.
+      </div>
+
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold text-white mb-2">Media Gallery</h1>
@@ -119,7 +171,7 @@ export function MediaPage() {
             onClick={() => fileInputRef.current?.click()}
             isLoading={uploading}
           >
-            Upload
+            {compressing ? 'Compressing...' : uploading ? 'Uploading...' : 'Upload'}
           </Button>
         </div>
       </div>
@@ -158,10 +210,39 @@ export function MediaPage() {
               <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/50 rounded text-xs text-white">
                 {item.year}
               </div>
+              {item.expiresAt && <ExpiryBadge expiresAt={item.expiresAt} />}
             </div>
           ))}
         </div>
       )}
+
+      {/* Upload dialog */}
+      <Modal
+        isOpen={showUploadDialog}
+        onClose={() => { setShowUploadDialog(false); setPendingFile(null); }}
+        size="sm"
+      >
+        <div>
+          <h2 className="text-lg font-semibold text-white mb-4">Upload media</h2>
+          {pendingFile && (
+            <p className="text-sm text-gray-400 mb-4 truncate">{pendingFile.name}</p>
+          )}
+          <label className="block text-sm text-gray-300 mb-1">Description (optional)</label>
+          <input
+            type="text"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Add a caption..."
+            className="w-full px-3 py-2 bg-playa-surface border border-playa-border rounded-lg text-gray-200 focus:outline-none focus:border-neon-cyan mb-6"
+          />
+          <div className="flex gap-3 justify-end">
+            <Button variant="ghost" onClick={() => { setShowUploadDialog(false); setPendingFile(null); }}>
+              Cancel
+            </Button>
+            <Button onClick={handleUploadConfirm}>Upload</Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Media Modal */}
       <Modal
@@ -185,7 +266,14 @@ export function MediaPage() {
               />
             )}
             <div className="mt-4 flex items-center justify-between">
-              <span className="text-gray-400 text-sm">{selectedMedia.year}</span>
+              <div>
+                <span className="text-gray-400 text-sm">{selectedMedia.year}</span>
+                {selectedMedia.expiresAt && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Expires: {new Date(selectedMedia.expiresAt.toMillis()).toLocaleDateString()}
+                  </p>
+                )}
+              </div>
               {(isAdmin || selectedMedia.uploadedBy === firebaseUser?.uid) && (
                 <Button
                   variant="danger"
