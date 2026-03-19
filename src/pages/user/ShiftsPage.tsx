@@ -29,17 +29,32 @@ export function ShiftsPage() {
 
   const fetchData = useCallback(async () => {
     if (!firebaseUser) return;
+    setLoading(true);
     try {
-      const [shiftsData, usersData, requestsData] = await Promise.all([
-        getPublishedShifts(),
+      const shiftsData = await getPublishedShifts();
+      setShifts(shiftsData);
+
+      const [usersResult, requestsResult] = await Promise.allSettled([
         getAllUsers(),
         getUserShiftRequests(firebaseUser.uid),
       ]);
-      setShifts(shiftsData);
-      setUsers(usersData);
-      setMyRequests(requestsData);
+
+      if (usersResult.status === 'fulfilled') {
+        setUsers(usersResult.value);
+      } else {
+        console.error('Error fetching users for shifts page:', usersResult.reason);
+        setUsers([]);
+      }
+
+      if (requestsResult.status === 'fulfilled') {
+        setMyRequests(requestsResult.value);
+      } else {
+        console.error('Error fetching shift requests for shifts page:', requestsResult.reason);
+        setMyRequests([]);
+      }
     } catch (error) {
       console.error('Error fetching shifts:', error);
+      setShifts([]);
     } finally {
       setLoading(false);
     }
