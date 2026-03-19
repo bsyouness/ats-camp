@@ -98,19 +98,3 @@ export interface UsefulLink {
   url: string;
   description: string;
 }
-
-export interface ShiftRequest {
-  id: string;
-  userId: string;
-  type: 'change_request' | 'cancel_request';
-  shiftId: string;
-  slotId: string;
-  targetShiftId: string | null;
-  targetSlotId: string | null;
-  message: string;
-  status: 'pending' | 'approved' | 'denied';
-  createdAt: Timestamp;
-  reviewedBy: string | null;
-  reviewedAt: Timestamp | null;
-  reviewNote: string | null;
-}

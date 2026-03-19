@@ -6,7 +6,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Shift, ShiftSlot, User } from '../../types';
 import { Button, Input, Loading, Modal } from '../../components/ui';
 import { ShiftCalendar } from '../../components/shifts/ShiftCalendar';
-import { ShiftRequestQueue } from '../../components/shifts/ShiftRequestQueue';
 import { ShiftNotes } from '../../components/shifts/ShiftNotes';
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -245,10 +244,6 @@ export function ShiftManagementPage() {
           onShiftMove={handleMoveShift}
         />
       </div>
-
-      {/* Shift Request Queue */}
-      <ShiftRequestQueue shifts={shifts} users={users} onRequestResolved={fetchData} />
-
       {/* Action Modal (single-click) */}
       <Modal
         isOpen={!!actionShift}
