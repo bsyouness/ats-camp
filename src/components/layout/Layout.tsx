@@ -8,13 +8,14 @@ interface LayoutProps {
 }
 
 export function Layout({ children }: LayoutProps) {
-  const { user, previewAsUser, setPreviewAsUser } = useAuth();
+  const { user, firebaseUser, previewAsUser, setPreviewAsUser } = useAuth();
   const isActualAdmin = user?.role === 'admin';
+  const showModeBanner = !!firebaseUser;
 
   return (
     <div className="min-h-screen flex flex-col bg-playa-dark">
       <div className="sticky top-0 z-50">
-        {isActualAdmin && !previewAsUser && (
+        {showModeBanner && isActualAdmin && !previewAsUser && (
           <div className="w-full bg-neon-purple/10 backdrop-blur-md border-b border-neon-purple/30 text-sm flex items-center justify-between px-4 py-2">
             <span className="text-neon-purple font-medium">Admin Mode</span>
             <button
@@ -25,7 +26,7 @@ export function Layout({ children }: LayoutProps) {
             </button>
           </div>
         )}
-        {previewAsUser && (
+        {showModeBanner && previewAsUser && (
           <div className="w-full bg-orange-600 text-white text-sm flex items-center justify-between px-4 py-2">
             <span className="font-medium">Member Preview Mode</span>
             <button

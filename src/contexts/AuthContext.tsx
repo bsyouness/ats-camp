@@ -27,6 +27,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } else {
         setUser(null);
+        sessionStorage.removeItem('previewAsUser');
+        setPreviewAsUserState(false);
       }
 
       setLoading(false);
