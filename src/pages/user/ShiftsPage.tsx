@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getAllShifts, signUpForSlot, cancelSlotSignUp } from '../../services/shifts';
+import { getPublishedShifts, signUpForSlot, cancelSlotSignUp } from '../../services/shifts';
 import { getAllUsers } from '../../services/users';
 import { createShiftRequest, getUserShiftRequests } from '../../services/shiftRequests';
 import { useAuth } from '../../contexts/AuthContext';
 import { Shift, ShiftRequest, User } from '../../types';
 import { Button, Loading, Modal } from '../../components/ui';
 import { ShiftCalendar } from '../../components/shifts/ShiftCalendar';
+import { ShiftNotes } from '../../components/shifts/ShiftNotes';
 
 export function ShiftsPage() {
   const { firebaseUser } = useAuth();
@@ -30,7 +31,7 @@ export function ShiftsPage() {
     if (!firebaseUser) return;
     try {
       const [shiftsData, usersData, requestsData] = await Promise.all([
-        getAllShifts(),
+        getPublishedShifts(),
         getAllUsers(),
         getUserShiftRequests(firebaseUser.uid),
       ]);
@@ -160,6 +161,9 @@ export function ShiftsPage() {
           onShiftClick={(shift) => setSelectedShift(shift)}
         />
       </div>
+
+      {/* Shift Notes */}
+      <ShiftNotes />
 
       {/* My Requests */}
       <div>

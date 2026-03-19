@@ -18,6 +18,7 @@ export interface User {
   };
   yearsAttended: number[];
   tentNumber: number | null;
+  banned?: boolean;
 }
 
 export interface Shift {
@@ -31,6 +32,7 @@ export interface Shift {
   slots: ShiftSlot[];
   createdBy: string;
   createdAt: Timestamp;
+  published?: boolean;
 }
 
 export interface ShiftSlot {

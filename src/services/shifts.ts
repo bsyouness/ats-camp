@@ -26,6 +26,12 @@ export async function getAllShifts(): Promise<Shift[]> {
   })) as Shift[];
 }
 
+export async function getPublishedShifts(): Promise<Shift[]> {
+  const all = await getAllShifts();
+  // Treat shifts without a published field as published (backwards compat)
+  return all.filter((s) => s.published !== false);
+}
+
 export async function getShift(shiftId: string): Promise<Shift | null> {
   const shiftRef = doc(db, SHIFTS_COLLECTION, shiftId);
   const shiftSnap = await getDoc(shiftRef);
@@ -46,12 +52,14 @@ export async function createShift(data: {
   location: string;
   slots: ShiftSlot[];
   createdBy: string;
+  published?: boolean;
 }): Promise<string> {
   const shiftsRef = collection(db, SHIFTS_COLLECTION);
   const docRef = await addDoc(shiftsRef, {
     ...data,
     date: Timestamp.fromDate(data.date),
     createdAt: Timestamp.now(),
+    published: data.published ?? false,
   });
 
   return docRef.id;

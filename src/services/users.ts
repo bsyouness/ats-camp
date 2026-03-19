@@ -3,6 +3,7 @@ import {
   getDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
   collection,
   getDocs,
   query,
@@ -72,4 +73,14 @@ export async function setUserRole(uid: string, role: 'member' | 'admin'): Promis
 export async function assignTentNumber(uid: string, tentNumber: number | null): Promise<void> {
   const userRef = doc(db, USERS_COLLECTION, uid);
   await updateDoc(userRef, { tentNumber });
+}
+
+export async function setBanned(uid: string, banned: boolean): Promise<void> {
+  const userRef = doc(db, USERS_COLLECTION, uid);
+  await updateDoc(userRef, { banned });
+}
+
+export async function removeUser(uid: string): Promise<void> {
+  const userRef = doc(db, USERS_COLLECTION, uid);
+  await deleteDoc(userRef);
 }

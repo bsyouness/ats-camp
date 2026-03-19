@@ -80,12 +80,6 @@ export function AdminDashboardPage() {
       color: 'neon-purple',
       highlight: stats.pendingContacts > 0,
     },
-    {
-      title: 'Site Configuration',
-      description: 'Edit links and site settings',
-      href: '/admin/config',
-      color: 'neon-cyan',
-    },
   ];
 
   if (loading) {

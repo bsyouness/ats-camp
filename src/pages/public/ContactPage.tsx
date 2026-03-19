@@ -2,8 +2,12 @@ import { useState, FormEvent } from 'react';
 import { collection, addDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { Button, Input, Card, CardContent } from '../../components/ui';
+import { useAuth } from '../../contexts/AuthContext';
+import { ContactsPage } from '../admin/ContactsPage';
 
 export function ContactPage() {
+  const { isAdmin } = useAuth();
+  if (isAdmin) return <ContactsPage />;
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');

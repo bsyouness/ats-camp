@@ -6,6 +6,7 @@ import { Shift, ShiftSlot, User } from '../../types';
 import { Button, Input, Loading, Modal } from '../../components/ui';
 import { ShiftCalendar } from '../../components/shifts/ShiftCalendar';
 import { ShiftRequestQueue } from '../../components/shifts/ShiftRequestQueue';
+import { ShiftNotes } from '../../components/shifts/ShiftNotes';
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
@@ -17,7 +18,9 @@ export function ShiftManagementPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingShift, setEditingShift] = useState<Shift | null>(null);
   const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Shift | null>(null);
+  const [actionShift, setActionShift] = useState<Shift | null>(null);
 
   // Form state
   const [title, setTitle] = useState('');
@@ -51,25 +54,22 @@ export function ShiftManagementPage() {
     setStartTime('');
     setEndTime('');
     setLocation('');
-    setSlots([]);
+    setSlots([{ id: generateId(), assignedTo: null, preAssigned: false }]);
     setEditingShift(null);
   };
 
   const openCreateModal = (clickDate?: Date, hour?: number) => {
     resetForm();
-    if (clickDate) {
-      setDate(clickDate.toISOString().split('T')[0]);
-    }
+    if (clickDate) setDate(clickDate.toISOString().split('T')[0]);
     if (hour !== undefined) {
-      const h = hour.toString().padStart(2, '0');
-      setStartTime(`${h}:00`);
-      const endH = ((hour + 2) % 24).toString().padStart(2, '0');
-      setEndTime(`${endH}:00`);
+      setStartTime(`${hour.toString().padStart(2, '0')}:00`);
+      setEndTime(`${((hour + 2) % 24).toString().padStart(2, '0')}:00`);
     }
     setShowModal(true);
   };
 
   const openEditModal = (shift: Shift) => {
+    setActionShift(null);
     setEditingShift(shift);
     setTitle(shift.title);
     setDescription(shift.description);
@@ -80,6 +80,31 @@ export function ShiftManagementPage() {
     setLocation(shift.location);
     setSlots(shift.slots);
     setShowModal(true);
+  };
+
+  const handleDuplicate = async (shift: Shift) => {
+    if (!firebaseUser) return;
+    setActionShift(null);
+    setSaving(true);
+    try {
+      const shiftDate = (shift.date as unknown as { toDate: () => Date }).toDate();
+      await createShift({
+        title: shift.title + ' (copy)',
+        description: shift.description,
+        date: shiftDate,
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        location: shift.location,
+        slots: shift.slots.map((s) => ({ ...s, id: generateId(), assignedTo: null })),
+        createdBy: firebaseUser.uid,
+        published: false,
+      });
+      await fetchData();
+    } catch {
+      alert('Failed to duplicate shift');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const addSlot = (preAssigned: boolean) => {
@@ -96,6 +121,10 @@ export function ShiftManagementPage() {
 
   const handleSave = async () => {
     if (!firebaseUser) return;
+    if (slots.length === 0) {
+      alert('A shift must have at least one slot.');
+      return;
+    }
     setSaving(true);
     try {
       if (editingShift) {
@@ -110,6 +139,7 @@ export function ShiftManagementPage() {
           location,
           slots,
           createdBy: firebaseUser.uid,
+          published: false,
         });
       }
       await fetchData();
@@ -128,10 +158,27 @@ export function ShiftManagementPage() {
     try {
       await deleteShift(deleteTarget.id);
       setDeleteTarget(null);
+      setActionShift(null);
       await fetchData();
-    } catch (error) {
-      console.error('Error deleting shift:', error);
+    } catch {
       alert('Failed to delete shift');
+    }
+  };
+
+  const handlePublishAll = async () => {
+    const unpublished = shifts.filter((s) => s.published === false);
+    if (unpublished.length === 0) {
+      alert('No unpublished shifts to publish.');
+      return;
+    }
+    setPublishing(true);
+    try {
+      await Promise.all(unpublished.map((s) => updateShift(s.id, { published: true })));
+      await fetchData();
+    } catch {
+      alert('Failed to publish shifts');
+    } finally {
+      setPublishing(false);
     }
   };
 
@@ -139,6 +186,8 @@ export function ShiftManagementPage() {
     if (!uid) return null;
     return users.find((u) => u.uid === uid);
   };
+
+  const unpublishedCount = shifts.filter((s) => s.published === false).length;
 
   if (loading) {
     return (
@@ -153,9 +202,16 @@ export function ShiftManagementPage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold text-white mb-2">Shift Management</h1>
-          <p className="text-gray-400">Click a shift to edit · Click an empty time slot to create</p>
+          <p className="text-gray-400">Click a shift for actions · Double-click to edit · Click an empty slot to create</p>
         </div>
-        <Button onClick={() => openCreateModal()}>+ Create Shift</Button>
+        <div className="flex gap-3">
+          {unpublishedCount > 0 && (
+            <Button variant="secondary" onClick={handlePublishAll} isLoading={publishing}>
+              Publish Changes ({unpublishedCount})
+            </Button>
+          )}
+          <Button variant="add" onClick={() => openCreateModal()}>+ Create Shift</Button>
+        </div>
       </div>
 
       {/* Calendar */}
@@ -165,13 +221,65 @@ export function ShiftManagementPage() {
           users={users}
           myUid={firebaseUser?.uid ?? null}
           isAdmin={true}
-          onShiftClick={openEditModal}
+          onShiftClick={(shift) => setActionShift(shift)}
+          onShiftDoubleClick={openEditModal}
           onEmptyCellClick={openCreateModal}
         />
       </div>
 
       {/* Shift Request Queue */}
       <ShiftRequestQueue shifts={shifts} users={users} onRequestResolved={fetchData} />
+
+      {/* Action Modal (single-click) */}
+      <Modal
+        isOpen={!!actionShift}
+        onClose={() => setActionShift(null)}
+        title={actionShift?.title ?? ''}
+        size="sm"
+      >
+        {actionShift && (
+          <div className="space-y-3">
+            <p className="text-gray-400 text-sm">
+              {(() => {
+                const d = (actionShift.date as unknown as { toDate: () => Date }).toDate();
+                return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+              })()}
+              {' · '}{actionShift.startTime}–{actionShift.endTime}
+              {actionShift.published === false && (
+                <span className="ml-2 px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-xs rounded">draft</span>
+              )}
+            </p>
+            <div className="flex flex-col gap-2 pt-2">
+              <Button className="w-full" onClick={() => openEditModal(actionShift)}>
+                Edit Shift
+              </Button>
+              <Button variant="secondary" className="w-full" onClick={() => handleDuplicate(actionShift)} isLoading={saving}>
+                Duplicate
+              </Button>
+              {actionShift.published === false ? (
+                <Button variant="secondary" className="w-full" onClick={async () => {
+                  await updateShift(actionShift.id, { published: true });
+                  setActionShift(null);
+                  await fetchData();
+                }}>
+                  Publish This Shift
+                </Button>
+              ) : (
+                <Button variant="secondary" className="w-full" onClick={async () => {
+                  await updateShift(actionShift.id, { published: false });
+                  setActionShift(null);
+                  await fetchData();
+                }}>
+                  Unpublish
+                </Button>
+              )}
+              <Button variant="danger" className="w-full" onClick={() => { setDeleteTarget(actionShift); setActionShift(null); }}>
+                Delete Shift
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Create / Edit Modal */}
       <Modal
@@ -236,10 +344,12 @@ export function ShiftManagementPage() {
           {/* Slots */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-medium text-gray-300">Slots</label>
+              <label className="text-sm font-medium text-gray-300">
+                Slots <span className="text-red-400">*</span>
+              </label>
               <div className="flex gap-2">
-                <Button variant="ghost" size="sm" onClick={() => addSlot(false)}>+ Open Slot</Button>
-                <Button variant="ghost" size="sm" onClick={() => addSlot(true)}>+ Pre-assigned</Button>
+                <Button variant="add" size="sm" onClick={() => addSlot(false)}>+ Open Slot</Button>
+                <Button variant="add" size="sm" onClick={() => addSlot(true)}>+ Pre-assigned</Button>
               </div>
             </div>
             <div className="space-y-2 max-h-48 overflow-y-auto">
@@ -273,7 +383,7 @@ export function ShiftManagementPage() {
                 </div>
               ))}
               {slots.length === 0 && (
-                <p className="text-gray-500 text-sm text-center py-2">Add slots for people to sign up</p>
+                <p className="text-red-400 text-sm text-center py-2">At least one slot is required</p>
               )}
             </div>
           </div>
@@ -294,7 +404,7 @@ export function ShiftManagementPage() {
               <Button
                 onClick={handleSave}
                 isLoading={saving}
-                disabled={!title || !date || !startTime || !endTime}
+                disabled={!title || !date || !startTime || !endTime || slots.length === 0}
               >
                 {editingShift ? 'Save Changes' : 'Create Shift'}
               </Button>
@@ -302,6 +412,9 @@ export function ShiftManagementPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Shift Notes */}
+      <ShiftNotes />
 
       {/* Delete confirmation */}
       <Modal

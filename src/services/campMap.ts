@@ -7,6 +7,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from './firebase';
+import { compressImage } from './media';
 import { CampMap, CampSpot } from '../types';
 
 const CAMP_MAPS_COLLECTION = 'campMaps';
@@ -32,8 +33,9 @@ export async function uploadCampMap(
   file: File,
   uploadedBy: string
 ): Promise<string> {
-  const storageRef = ref(storage, `campMaps/${year}/${file.name}`);
-  await uploadBytes(storageRef, file);
+  const compressed = await compressImage(file);
+  const storageRef = ref(storage, `campMaps/${year}/map.jpg`);
+  await uploadBytes(storageRef, compressed, { contentType: 'image/jpeg' });
   const downloadUrl = await getDownloadURL(storageRef);
 
   const mapRef = doc(db, CAMP_MAPS_COLLECTION, year.toString());
