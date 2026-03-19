@@ -15,6 +15,51 @@ interface PackingCategory {
   items: string[];
 }
 
+interface CampCard {
+  id: string;
+  type: 'dues' | 'notion' | 'whatsapp' | 'custom';
+  title: string;
+  description: string;
+  url: string;
+  buttonLabel: string;
+}
+
+interface CampSection {
+  cards: CampCard[];
+}
+
+const uid = () => Math.random().toString(36).slice(2, 9);
+
+const DEFAULT_CAMP_CARDS: CampCard[] = [
+  {
+    id: 'camp-dues',
+    type: 'dues',
+    title: 'Camp Dues',
+    description:
+      'Camp dues help cover shared expenses like infrastructure, food, and supplies. Please make sure your dues are paid before the burn.',
+    url: '',
+    buttonLabel: 'Pay Camp Dues',
+  },
+  {
+    id: 'camp-notion',
+    type: 'notion',
+    title: 'Camp Notion',
+    description:
+      'Our shared Notion workspace contains planning documents, shopping lists, build schedules, and more.',
+    url: '',
+    buttonLabel: 'Open Notion',
+  },
+  {
+    id: 'camp-whatsapp',
+    type: 'whatsapp',
+    title: 'WhatsApp Group',
+    description:
+      'Join the camp WhatsApp group to stay connected with your fellow campers.',
+    url: '',
+    buttonLabel: 'Join WhatsApp',
+  },
+];
+
 const DEFAULT_USEFUL_LINKS: UsefulLink[] = [
   { title: 'Burning Man Official', url: 'https://burningman.org', description: 'Official Burning Man website' },
   { title: 'Survival Guide', url: 'https://survival.burningman.org', description: 'Everything you need to survive and thrive on the playa' },
@@ -48,20 +93,66 @@ const ExternalLinkIcon = () => (
   </svg>
 );
 
+function getDefaultCampCard(type: CampCard['type']): CampCard {
+  if (type === 'dues') return { ...DEFAULT_CAMP_CARDS[0], id: uid() };
+  if (type === 'notion') return { ...DEFAULT_CAMP_CARDS[1], id: uid() };
+  if (type === 'whatsapp') return { ...DEFAULT_CAMP_CARDS[2], id: uid() };
+  return {
+    id: uid(),
+    type: 'custom',
+    title: 'New Camp Resource',
+    description: 'Add a short description for this camp resource.',
+    url: '',
+    buttonLabel: 'Open Resource',
+  };
+}
+
+function hydrateCampSection(data: Record<string, unknown>): CampSection {
+  const storedSection = data.campSection as CampSection | undefined;
+  if (storedSection?.cards?.length) {
+    return { cards: storedSection.cards };
+  }
+
+  return {
+    cards: DEFAULT_CAMP_CARDS.map((card) => {
+      if (card.type === 'dues') return { ...card, url: (data.campDuesLink as string) || '' };
+      if (card.type === 'notion') return { ...card, url: (data.notionLink as string) || '' };
+      if (card.type === 'whatsapp') return { ...card, url: (data.whatsappGroupLink as string) || '' };
+      return card;
+    }),
+  };
+}
+
+function getCampCardPlaceholder(type: CampCard['type']): string {
+  if (type === 'dues') return 'https://...';
+  if (type === 'notion') return 'https://notion.so/...';
+  if (type === 'whatsapp') return 'https://chat.whatsapp.com/...';
+  return 'https://...';
+}
+
+function getCampCardButtonClass(type: CampCard['type']): string {
+  if (type === 'dues') return 'bg-neon-orange text-white hover:bg-neon-orange/90';
+  if (type === 'notion') return 'bg-playa-card border border-playa-border text-gray-200 hover:border-neon-purple hover:text-neon-purple';
+  if (type === 'whatsapp') return 'bg-green-600/20 border border-green-600/40 text-green-400 hover:bg-green-600/30';
+  return 'bg-playa-card border border-playa-border text-gray-200 hover:border-neon-cyan hover:text-neon-cyan';
+}
+
+function getCampCardEmptyMessage(type: CampCard['type'], isAdmin: boolean): string {
+  if (type === 'dues') return isAdmin ? 'Edit this card to add a payment link.' : 'Payment link coming soon.';
+  if (type === 'notion') return isAdmin ? 'Edit this card to add the Notion link.' : 'Notion workspace link coming soon.';
+  if (type === 'whatsapp') return isAdmin ? 'Edit this card to add the WhatsApp invite link.' : 'WhatsApp group link coming soon.';
+  return isAdmin ? 'Edit this card to add a resource link.' : 'Resource link coming soon.';
+}
+
 export function InfoPage() {
   const { isAdmin } = useAuth();
 
-  // Camp links state
-  const [campDuesLink, setCampDuesLink] = useState('');
-  const [notionLink, setNotionLink] = useState('');
-  const [whatsappLink, setWhatsappLink] = useState('');
-  const [editingDues, setEditingDues] = useState(false);
-  const [editingNotion, setEditingNotion] = useState(false);
-  const [editingWhatsapp, setEditingWhatsapp] = useState(false);
-  const [duesDraft, setDuesDraft] = useState('');
-  const [notionDraft, setNotionDraft] = useState('');
-  const [whatsappDraft, setWhatsappDraft] = useState('');
-  const [savingLink, setSavingLink] = useState(false);
+  // Camp section state
+  const [campSection, setCampSection] = useState<CampSection>({ cards: DEFAULT_CAMP_CARDS });
+  const [editingCampCardId, setEditingCampCardId] = useState<string | null>(null);
+  const [addingCampCard, setAddingCampCard] = useState(false);
+  const [campCardDraft, setCampCardDraft] = useState<CampCard>(getDefaultCampCard('custom'));
+  const [savingCamp, setSavingCamp] = useState(false);
 
   // Useful links state
   const [usefulLinks, setUsefulLinks] = useState<UsefulLink[]>(DEFAULT_USEFUL_LINKS);
@@ -84,6 +175,7 @@ export function InfoPage() {
 
   // Undo state
   const [undoLabel, setUndoLabel] = useState<string | null>(null);
+  const undoCampSnapshot = useRef<CampSection | null>(null);
   const undoLinksSnapshot = useRef<UsefulLink[] | null>(null);
   const undoPackingSnapshot = useRef<PackingCategory[] | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -92,9 +184,7 @@ export function InfoPage() {
     getDoc(doc(db, 'config', 'site')).then((snap) => {
       if (snap.exists()) {
         const data = snap.data();
-        if (data.campDuesLink) setCampDuesLink(data.campDuesLink);
-        if (data.notionLink) setNotionLink(data.notionLink);
-        if (data.whatsappGroupLink) setWhatsappLink(data.whatsappGroupLink);
+        setCampSection(hydrateCampSection(data));
         if (data.usefulLinks?.length > 0) setUsefulLinks(data.usefulLinks as UsefulLink[]);
         if (data.packingCategories?.length > 0) setPacking(data.packingCategories as PackingCategory[]);
       }
@@ -102,16 +192,64 @@ export function InfoPage() {
     return () => { if (undoTimer.current) clearTimeout(undoTimer.current); };
   }, []);
 
-  // ——— Camp links helpers ———
-  const saveCampLink = async (field: 'campDuesLink' | 'notionLink' | 'whatsappGroupLink', value: string) => {
-    setSavingLink(true);
+  // ——— Camp section helpers ———
+  const buildCampPayload = (section: CampSection) => {
+    const duesCard = section.cards.find((card) => card.type === 'dues');
+    const notionCard = section.cards.find((card) => card.type === 'notion');
+    const whatsappCard = section.cards.find((card) => card.type === 'whatsapp');
+
+    return {
+      campSection: section,
+      campDuesLink: duesCard?.url || '',
+      notionLink: notionCard?.url || '',
+      whatsappGroupLink: whatsappCard?.url || '',
+    };
+  };
+
+  const persistCampSection = async (section: CampSection) => {
+    setSavingCamp(true);
     try {
-      await setDoc(doc(db, 'config', 'site'), { [field]: value }, { merge: true });
-      if (field === 'campDuesLink') { setCampDuesLink(value); setEditingDues(false); }
-      else if (field === 'notionLink') { setNotionLink(value); setEditingNotion(false); }
-      else { setWhatsappLink(value); setEditingWhatsapp(false); }
+      await setDoc(doc(db, 'config', 'site'), buildCampPayload(section), { merge: true });
+      if (!undoCampSnapshot.current) setCampSection(section);
     } catch { alert('Failed to save'); }
-    finally { setSavingLink(false); }
+    finally { setSavingCamp(false); }
+  };
+
+  const softDeleteCampSection = (next: CampSection, label: string) => {
+    undoCampSnapshot.current = campSection;
+    undoLinksSnapshot.current = null;
+    undoPackingSnapshot.current = null;
+    setCampSection(next);
+    setUndoLabel(label);
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    undoTimer.current = setTimeout(() => {
+      setDoc(doc(db, 'config', 'site'), buildCampPayload(next), { merge: true });
+      setUndoLabel(null);
+      undoCampSnapshot.current = null;
+      undoTimer.current = null;
+    }, 5000);
+  };
+
+  const handleSaveCampCard = async () => {
+    if (!campCardDraft.title.trim()) return;
+
+    const nextCards = editingCampCardId
+      ? campSection.cards.map((card) => (card.id === editingCampCardId ? campCardDraft : card))
+      : [...campSection.cards, campCardDraft];
+
+    await persistCampSection({ cards: nextCards });
+    setEditingCampCardId(null);
+    setAddingCampCard(false);
+    setCampCardDraft(getDefaultCampCard('custom'));
+  };
+
+  const handleDeleteCampCard = (cardId: string) => {
+    const deletedCard = campSection.cards.find((card) => card.id === cardId);
+    if (!deletedCard) return;
+    softDeleteCampSection(
+      { cards: campSection.cards.filter((card) => card.id !== cardId) },
+      `"${deletedCard.title}" deleted`
+    );
   };
 
   // ——— Useful links helpers ———
@@ -174,8 +312,10 @@ export function InfoPage() {
   const handleUndo = () => {
     if (undoTimer.current) clearTimeout(undoTimer.current);
     undoTimer.current = null;
+    if (undoCampSnapshot.current) setCampSection(undoCampSnapshot.current);
     if (undoLinksSnapshot.current) setUsefulLinks(undoLinksSnapshot.current);
     if (undoPackingSnapshot.current) setPacking(undoPackingSnapshot.current);
+    undoCampSnapshot.current = null;
     undoLinksSnapshot.current = null;
     undoPackingSnapshot.current = null;
     setUndoLabel(null);
@@ -184,8 +324,10 @@ export function InfoPage() {
   const dismissUndo = () => {
     if (undoTimer.current) clearTimeout(undoTimer.current);
     undoTimer.current = null;
+    if (undoCampSnapshot.current) setDoc(doc(db, 'config', 'site'), buildCampPayload(campSection), { merge: true });
     if (undoLinksSnapshot.current) setDoc(doc(db, 'config', 'site'), { usefulLinks }, { merge: true });
     if (undoPackingSnapshot.current) setDoc(doc(db, 'config', 'site'), { packingCategories: packing }, { merge: true });
+    undoCampSnapshot.current = null;
     undoLinksSnapshot.current = null;
     undoPackingSnapshot.current = null;
     setUndoLabel(null);
@@ -244,11 +386,9 @@ export function InfoPage() {
   const handleRevertToDefault = async () => {
     if (!confirm('Revert useful links and packing list to default content? All custom edits will be lost.')) return;
     await deleteDoc(doc(db, 'config', 'site'));
+    setCampSection({ cards: DEFAULT_CAMP_CARDS });
     setUsefulLinks(DEFAULT_USEFUL_LINKS);
     setPacking(DEFAULT_PACKING);
-    setCampDuesLink('');
-    setNotionLink('');
-    setWhatsappLink('');
   };
 
   const LinkForm = ({ onSave, onCancel, saving }: { onSave: () => void; onCancel: () => void; saving: boolean }) => (
@@ -263,6 +403,66 @@ export function InfoPage() {
     </div>
   );
 
+  const CampCardForm = ({ onSave, onCancel }: { onSave: () => void; onCancel: () => void }) => (
+    <div className="space-y-3 p-4 bg-playa-surface rounded-lg border border-neon-purple/30">
+      <div className="grid gap-3 md:grid-cols-2">
+        <Input
+          label="Title"
+          value={campCardDraft.title}
+          onChange={(e) => setCampCardDraft({ ...campCardDraft, title: e.target.value })}
+          placeholder="Card title"
+        />
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-1.5">Type</label>
+          <select
+            value={campCardDraft.type}
+            onChange={(e) => {
+              const nextType = e.target.value as CampCard['type'];
+              const nextDefault = getDefaultCampCard(nextType);
+              setCampCardDraft({
+                ...campCardDraft,
+                type: nextType,
+                buttonLabel: campCardDraft.buttonLabel || nextDefault.buttonLabel,
+              });
+            }}
+            className="w-full px-4 py-2.5 bg-playa-card border border-playa-border rounded-lg text-gray-200 focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan transition-colors"
+          >
+            <option value="dues">Camp dues</option>
+            <option value="notion">Notion</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+      </div>
+      <Input
+        label="Description"
+        value={campCardDraft.description}
+        onChange={(e) => setCampCardDraft({ ...campCardDraft, description: e.target.value })}
+        placeholder="Short description"
+      />
+      <Input
+        label="URL"
+        value={campCardDraft.url}
+        onChange={(e) => setCampCardDraft({ ...campCardDraft, url: e.target.value })}
+        placeholder={getCampCardPlaceholder(campCardDraft.type)}
+      />
+      <Input
+        label="Button Label"
+        value={campCardDraft.buttonLabel}
+        onChange={(e) => setCampCardDraft({ ...campCardDraft, buttonLabel: e.target.value })}
+        placeholder="Button text"
+      />
+      <div className="flex gap-2">
+        <Button size="sm" onClick={onSave} isLoading={savingCamp} disabled={!campCardDraft.title.trim()}>
+          Save
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <div className="text-center mb-12">
@@ -272,136 +472,95 @@ export function InfoPage() {
 
       {/* Camp */}
       <section className="mb-12">
-        <h2 className="text-2xl font-bold text-white mb-6">Camp</h2>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold text-white">Camp</h2>
+          {isAdmin && !addingCampCard && (
+            <Button
+              size="sm"
+              variant="add"
+              onClick={() => {
+                setAddingCampCard(true);
+                setEditingCampCardId(null);
+                setCampCardDraft(getDefaultCampCard('custom'));
+              }}
+            >
+              + Add Card
+            </Button>
+          )}
+        </div>
+
+        {isAdmin && addingCampCard && (
+          <div className="mb-4">
+            <CampCardForm
+              onSave={handleSaveCampCard}
+              onCancel={() => {
+                setAddingCampCard(false);
+                setCampCardDraft(getDefaultCampCard('custom'));
+              }}
+            />
+          </div>
+        )}
+
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {/* Camp Dues */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Camp Dues</CardTitle>
-                {isAdmin && !editingDues && (
-                  <button onClick={() => { setEditingDues(true); setDuesDraft(campDuesLink); }} className="p-1 rounded bg-neon-purple/20 hover:bg-neon-purple/40 text-neon-purple">
-                    <PencilIcon />
-                  </button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-gray-400 mb-4">
-                Camp dues help cover shared expenses like infrastructure, food, and supplies.
-                Please make sure your dues are paid before the burn.
-              </p>
-              {editingDues ? (
-                <div className="space-y-2">
-                  <Input
-                    placeholder="https://..."
-                    value={duesDraft}
-                    onChange={(e) => setDuesDraft(e.target.value)}
-                    autoFocus
-                  />
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={() => saveCampLink('campDuesLink', duesDraft)} isLoading={savingLink}>Save</Button>
-                    <Button size="sm" variant="ghost" onClick={() => setEditingDues(false)}>Cancel</Button>
-                  </div>
+          {campSection.cards.map((card) => (
+            <Card key={card.id}>
+              <CardHeader>
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle>{card.title}</CardTitle>
+                  {isAdmin && (
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => {
+                          setEditingCampCardId(card.id);
+                          setAddingCampCard(false);
+                          setCampCardDraft({ ...card });
+                        }}
+                        className="p-1 rounded bg-neon-purple/20 hover:bg-neon-purple/40 text-neon-purple"
+                      >
+                        <PencilIcon />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCampCard(card.id)}
+                        className="p-1 rounded bg-red-500/20 hover:bg-red-500/40 text-red-400"
+                      >
+                        <TrashIcon />
+                      </button>
+                    </div>
+                  )}
                 </div>
-              ) : campDuesLink ? (
-                <a href={campDuesLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-neon-orange text-white rounded-lg hover:bg-neon-orange/90 transition-colors">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                  Pay Camp Dues
-                </a>
-              ) : (
-                <p className="text-sm text-gray-500">{isAdmin ? 'Click the pencil icon to add a payment link.' : 'Payment link coming soon.'}</p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Camp Notion */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Camp Notion</CardTitle>
-                {isAdmin && !editingNotion && (
-                  <button onClick={() => { setEditingNotion(true); setNotionDraft(notionLink); }} className="p-1 rounded bg-neon-purple/20 hover:bg-neon-purple/40 text-neon-purple">
-                    <PencilIcon />
-                  </button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-gray-400 mb-4">
-                Our shared Notion workspace contains planning documents, shopping lists,
-                build schedules, and more.
-              </p>
-              {editingNotion ? (
-                <div className="space-y-2">
-                  <Input
-                    placeholder="https://notion.so/..."
-                    value={notionDraft}
-                    onChange={(e) => setNotionDraft(e.target.value)}
-                    autoFocus
+              </CardHeader>
+              <CardContent>
+                {isAdmin && editingCampCardId === card.id ? (
+                  <CampCardForm
+                    onSave={handleSaveCampCard}
+                    onCancel={() => {
+                      setEditingCampCardId(null);
+                      setCampCardDraft(getDefaultCampCard('custom'));
+                    }}
                   />
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={() => saveCampLink('notionLink', notionDraft)} isLoading={savingLink}>Save</Button>
-                    <Button size="sm" variant="ghost" onClick={() => setEditingNotion(false)}>Cancel</Button>
-                  </div>
-                </div>
-              ) : notionLink ? (
-                <a href={notionLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-playa-card border border-playa-border text-gray-200 rounded-lg hover:border-neon-purple hover:text-neon-purple transition-colors">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Open Notion
-                </a>
-              ) : (
-                <p className="text-sm text-gray-500">{isAdmin ? 'Click the pencil icon to add the Notion link.' : 'Notion workspace link coming soon.'}</p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* WhatsApp */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>WhatsApp Group</CardTitle>
-                {isAdmin && !editingWhatsapp && (
-                  <button onClick={() => { setEditingWhatsapp(true); setWhatsappDraft(whatsappLink); }} className="p-1 rounded bg-neon-purple/20 hover:bg-neon-purple/40 text-neon-purple">
-                    <PencilIcon />
-                  </button>
+                ) : (
+                  <>
+                    <p className="text-gray-400 mb-4">{card.description}</p>
+                    {card.url ? (
+                      <a
+                        href={card.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${getCampCardButtonClass(card.type)}`}
+                      >
+                        <ExternalLinkIcon />
+                        {card.buttonLabel}
+                      </a>
+                    ) : (
+                      <p className="text-sm text-gray-500">
+                        {getCampCardEmptyMessage(card.type, isAdmin)}
+                      </p>
+                    )}
+                  </>
                 )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-gray-400 mb-4">
-                Join the camp WhatsApp group to stay connected with your fellow campers.
-              </p>
-              {editingWhatsapp ? (
-                <div className="space-y-2">
-                  <Input
-                    placeholder="https://chat.whatsapp.com/..."
-                    value={whatsappDraft}
-                    onChange={(e) => setWhatsappDraft(e.target.value)}
-                    autoFocus
-                  />
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={() => saveCampLink('whatsappGroupLink', whatsappDraft)} isLoading={savingLink}>Save</Button>
-                    <Button size="sm" variant="ghost" onClick={() => setEditingWhatsapp(false)}>Cancel</Button>
-                  </div>
-                </div>
-              ) : whatsappLink ? (
-                <a href={whatsappLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-green-600/20 border border-green-600/40 text-green-400 rounded-lg hover:bg-green-600/30 transition-colors">
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
-                    <path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.555 4.113 1.528 5.836L.057 23.215a.75.75 0 00.928.928l5.379-1.471A11.944 11.944 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75a9.726 9.726 0 01-5.031-1.4l-.36-.214-3.732 1.02 1.02-3.732-.214-.36A9.726 9.726 0 012.25 12C2.25 6.615 6.615 2.25 12 2.25S21.75 6.615 21.75 12 17.385 21.75 12 21.75z"/>
-                  </svg>
-                  Join WhatsApp
-                </a>
-              ) : (
-                <p className="text-sm text-gray-500">{isAdmin ? 'Click the pencil icon to add the WhatsApp invite link.' : 'WhatsApp group link coming soon.'}</p>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </section>
 
