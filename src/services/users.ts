@@ -8,10 +8,11 @@ import {
   getDocs,
   query,
   orderBy,
+  where,
   Timestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { User } from '../types';
+import { LoginMethod, User } from '../types';
 
 const USERS_COLLECTION = 'users';
 
@@ -20,12 +21,14 @@ export async function createUser(data: {
   email: string;
   displayName: string;
   photoURL?: string | null;
+  loginMethod: LoginMethod;
 }): Promise<void> {
   const userRef = doc(db, USERS_COLLECTION, data.uid);
 
   const newUser: User = {
     uid: data.uid,
-    email: data.email,
+    email: data.email.trim().toLowerCase(),
+    loginMethod: data.loginMethod,
     role: 'member',
     createdAt: Timestamp.now(),
     displayName: data.displayName,
@@ -50,6 +53,19 @@ export async function getUser(uid: string): Promise<User | null> {
   }
 
   return null;
+}
+
+export async function getUserByEmail(email: string): Promise<User | null> {
+  const normalizedEmail = email.trim().toLowerCase();
+  const usersRef = collection(db, USERS_COLLECTION);
+  const q = query(usersRef, where('email', '==', normalizedEmail));
+  const snapshot = await getDocs(q);
+
+  if (snapshot.empty) {
+    return null;
+  }
+
+  return snapshot.docs[0].data() as User;
 }
 
 export async function updateUser(uid: string, data: Partial<User>): Promise<void> {

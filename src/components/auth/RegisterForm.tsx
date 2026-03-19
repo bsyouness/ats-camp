@@ -36,9 +36,11 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
       await signUp(email, password, displayName);
       onSuccess?.();
     } catch (err) {
-      const error = err as { code?: string };
+      const error = err as { code?: string; message?: string };
       if (error.code === 'auth/email-already-in-use') {
         setError('An account with this email already exists');
+      } else if (error.code === 'auth/wrong-login-method' && error.message) {
+        setError(error.message);
       } else {
         setError('Failed to create account. Please try again.');
       }

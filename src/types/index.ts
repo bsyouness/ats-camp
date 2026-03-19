@@ -1,10 +1,12 @@
 import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'member' | 'admin';
+export type LoginMethod = 'email' | 'google' | 'hubid';
 
 export interface User {
   uid: string;
   email: string;
+  loginMethod?: LoginMethod;
   role: UserRole;
   createdAt: Timestamp;
   displayName: string;

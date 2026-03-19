@@ -7,7 +7,7 @@ import { updateUser } from '../../services/users';
 import { getMyMedia, compressImage } from '../../services/media';
 import { storage } from '../../services/firebase';
 import { Button, Input, Card, CardContent, CardHeader, CardTitle, Loading, Modal } from '../../components/ui';
-import { Media } from '../../types';
+import { LoginMethod, Media } from '../../types';
 
 // ── Avatar component ──────────────────────────────────────────────────────────
 
@@ -256,6 +256,19 @@ export function MyProfilePage() {
   const [contactPhone, setContactPhone] = useState('');
   const [yearsAttended, setYearsAttended] = useState('');
 
+  const getLoginMethodLabel = (method: LoginMethod | undefined) => {
+    switch (method) {
+      case 'email':
+        return 'Email and password';
+      case 'google':
+        return 'Google';
+      case 'hubid':
+        return 'Hub Culture';
+      default:
+        return 'Not recorded yet';
+    }
+  };
+
   useEffect(() => {
     if (user) {
       setDisplayName(user.displayName || '');
@@ -378,6 +391,18 @@ export function MyProfilePage() {
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
               />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Login Method</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-lg border border-playa-border bg-playa-card px-4 py-3">
+              <p className="text-sm text-gray-400 mb-1">This account is tied to:</p>
+              <p className="text-white font-medium">{getLoginMethodLabel(user?.loginMethod)}</p>
             </div>
           </CardContent>
         </Card>
