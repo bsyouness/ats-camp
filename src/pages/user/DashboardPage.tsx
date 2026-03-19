@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui';
 import { getAllContacts } from '../../services/contacts';
+import { getPublishedShifts } from '../../services/shifts';
+import { Shift } from '../../types';
 
 type DashboardLink = {
   title: string;
@@ -15,8 +17,9 @@ type DashboardLink = {
 };
 
 export function DashboardPage() {
-  const { user, isAdmin } = useAuth();
+  const { user, firebaseUser, isAdmin } = useAuth();
   const [stats, setStats] = useState({ pendingContacts: 0 });
+  const [myShifts, setMyShifts] = useState<Shift[]>([]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -24,6 +27,22 @@ export function DashboardPage() {
       setStats({ pendingContacts: contacts.filter((c) => !c.handled).length });
     }).catch(console.error);
   }, [isAdmin]);
+
+  useEffect(() => {
+    if (!firebaseUser) return;
+    getPublishedShifts()
+      .then((shifts) => {
+        const assigned = shifts
+          .filter((shift) => shift.slots.some((slot) => slot.assignedTo === firebaseUser.uid))
+          .sort((a, b) => {
+            const aDate = (a.date as unknown as { toDate: () => Date }).toDate().getTime();
+            const bDate = (b.date as unknown as { toDate: () => Date }).toDate().getTime();
+            return aDate - bDate || a.startTime.localeCompare(b.startTime);
+          });
+        setMyShifts(assigned);
+      })
+      .catch(console.error);
+  }, [firebaseUser]);
 
   const commonLinks: DashboardLink[] = [
     {
@@ -180,6 +199,45 @@ export function DashboardPage() {
           </CardContent>
         </Card>
       )}
+
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle>My Shifts</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {myShifts.length === 0 ? (
+            <p className="text-gray-400">
+              You are not assigned to any published shifts yet. <Link to="/shifts" className="text-neon-cyan hover:underline">Browse open shifts</Link>.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {myShifts.slice(0, 5).map((shift) => {
+                const shiftDate = (shift.date as unknown as { toDate: () => Date }).toDate();
+                return (
+                  <Link
+                    key={shift.id}
+                    to="/shifts"
+                    className="block rounded-lg border border-playa-border bg-playa-surface px-4 py-3 hover:border-neon-cyan/40 transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-white font-medium">{shift.title}</p>
+                        <p className="text-sm text-gray-400">
+                          {shiftDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                          {' · '}
+                          {shift.startTime}–{shift.endTime}
+                          {shift.location ? ` · ${shift.location}` : ''}
+                        </p>
+                      </div>
+                      <span className="text-xs text-neon-cyan">View</span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
