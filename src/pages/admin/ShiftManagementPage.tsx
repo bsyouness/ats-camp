@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Timestamp } from 'firebase/firestore';
 import { getAllShifts, createShift, updateShift, deleteShift } from '../../services/shifts';
 import { getAllUsers } from '../../services/users';
 import { useAuth } from '../../contexts/AuthContext';
@@ -21,6 +22,7 @@ export function ShiftManagementPage() {
   const [publishing, setPublishing] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Shift | null>(null);
   const [actionShift, setActionShift] = useState<Shift | null>(null);
+  const [showPublishConfirm, setShowPublishConfirm] = useState(false);
 
   // Form state
   const [title, setTitle] = useState('');
@@ -63,7 +65,7 @@ export function ShiftManagementPage() {
     if (clickDate) setDate(clickDate.toISOString().split('T')[0]);
     if (hour !== undefined) {
       setStartTime(`${hour.toString().padStart(2, '0')}:00`);
-      setEndTime(`${((hour + 2) % 24).toString().padStart(2, '0')}:00`);
+      setEndTime(`${((hour + 1) % 24).toString().padStart(2, '0')}:00`);
     }
     setShowModal(true);
   };
@@ -174,6 +176,7 @@ export function ShiftManagementPage() {
     setPublishing(true);
     try {
       await Promise.all(unpublished.map((s) => updateShift(s.id, { published: true })));
+      setShowPublishConfirm(false);
       await fetchData();
     } catch {
       alert('Failed to publish shifts');
@@ -188,6 +191,21 @@ export function ShiftManagementPage() {
   };
 
   const unpublishedCount = shifts.filter((s) => s.published === false).length;
+
+  const handleMoveShift = async (shift: Shift, nextDate: Date, nextStartTime: string, nextEndTime: string) => {
+    try {
+      await updateShift(shift.id, {
+        date: Timestamp.fromDate(new Date(nextDate.getFullYear(), nextDate.getMonth(), nextDate.getDate(), 12, 0, 0)) as Shift['date'],
+        startTime: nextStartTime,
+        endTime: nextEndTime,
+      });
+      setActionShift(null);
+      await fetchData();
+    } catch (error) {
+      console.error('Error moving shift:', error);
+      alert('Failed to move shift');
+    }
+  };
 
   if (loading) {
     return (
@@ -206,7 +224,7 @@ export function ShiftManagementPage() {
         </div>
         <div className="flex gap-3">
           {unpublishedCount > 0 && (
-            <Button variant="secondary" onClick={handlePublishAll} isLoading={publishing}>
+            <Button variant="secondary" onClick={() => setShowPublishConfirm(true)} isLoading={publishing}>
               Publish Changes ({unpublishedCount})
             </Button>
           )}
@@ -224,6 +242,7 @@ export function ShiftManagementPage() {
           onShiftClick={(shift) => setActionShift(shift)}
           onShiftDoubleClick={openEditModal}
           onEmptyCellClick={openCreateModal}
+          onShiftMove={handleMoveShift}
         />
       </div>
 
@@ -415,6 +434,28 @@ export function ShiftManagementPage() {
 
       {/* Shift Notes */}
       <ShiftNotes />
+
+      <Modal
+        isOpen={showPublishConfirm}
+        onClose={() => setShowPublishConfirm(false)}
+        title="Publish Changes"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-gray-400">
+            Publish all <span className="text-white font-medium">{unpublishedCount}</span> unpublished shifts?
+            This will make them visible to members immediately.
+          </p>
+          <div className="flex gap-3 justify-end">
+            <Button variant="secondary" onClick={() => setShowPublishConfirm(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handlePublishAll} isLoading={publishing}>
+              Publish Changes
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Delete confirmation */}
       <Modal
