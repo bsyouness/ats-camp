@@ -1,12 +1,13 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { signOut } from '../../services/auth';
 import { Button } from '../ui';
 import { useState } from 'react';
 
 export function Header() {
-  const { user, firebaseUser, isAdmin } = useAuth();
+  const { user, firebaseUser } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleSignOut = async () => {
@@ -14,8 +15,20 @@ export function Header() {
     navigate('/');
   };
 
+  const navClass = (href: string) =>
+    `transition-colors ${
+      pathname === href
+        ? 'text-white font-medium border-b-2 border-neon-orange pb-0.5'
+        : 'text-gray-400 hover:text-white'
+    }`;
+
+  const mobileNavClass = (href: string) =>
+    `py-2 transition-colors ${
+      pathname === href ? 'text-white font-medium' : 'text-gray-400 hover:text-white'
+    }`;
+
   return (
-    <header className="sticky top-0 z-40 bg-playa-surface/80 backdrop-blur-md border-b border-playa-border">
+    <header className="bg-playa-surface/80 backdrop-blur-md border-b border-playa-border">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <Link to="/" className="flex items-center gap-2">
@@ -26,36 +39,17 @@ export function Header() {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-6">
-            <Link to="/about" className="text-gray-400 hover:text-white transition-colors">
-              About
+            <Link to="/about" className={navClass('/about')}>
+              🏕️ About
             </Link>
-            <Link to="/info" className="text-gray-400 hover:text-white transition-colors">
-              Info
-            </Link>
-            <Link to="/contact" className="text-gray-400 hover:text-white transition-colors">
-              Contact
+            <Link to="/resources" className={navClass('/resources')}>
+              📋 Resources
             </Link>
 
             {firebaseUser && (
-              <>
-                <Link to="/dashboard" className="text-gray-400 hover:text-white transition-colors">
-                  Dashboard
-                </Link>
-                <Link to="/map" className="text-gray-400 hover:text-white transition-colors">
-                  Map
-                </Link>
-                <Link to="/shifts" className="text-gray-400 hover:text-white transition-colors">
-                  Shifts
-                </Link>
-                <Link to="/members" className="text-gray-400 hover:text-white transition-colors">
-                  Members
-                </Link>
-                {isAdmin && (
-                  <Link to="/admin" className="text-neon-purple hover:text-neon-purple/80 transition-colors">
-                    Admin
-                  </Link>
-                )}
-              </>
+              <Link to="/dashboard" className={navClass('/dashboard')}>
+                🏠 Dashboard
+              </Link>
             )}
           </nav>
 
@@ -113,36 +107,17 @@ export function Header() {
         {mobileMenuOpen && (
           <div className="md:hidden py-4 border-t border-playa-border">
             <nav className="flex flex-col gap-3">
-              <Link to="/about" className="text-gray-400 hover:text-white py-2" onClick={() => setMobileMenuOpen(false)}>
-                About
+              <Link to="/about" className={mobileNavClass('/about')} onClick={() => setMobileMenuOpen(false)}>
+                🏕️ About
               </Link>
-              <Link to="/info" className="text-gray-400 hover:text-white py-2" onClick={() => setMobileMenuOpen(false)}>
-                Info
-              </Link>
-              <Link to="/contact" className="text-gray-400 hover:text-white py-2" onClick={() => setMobileMenuOpen(false)}>
-                Contact
+              <Link to="/resources" className={mobileNavClass('/resources')} onClick={() => setMobileMenuOpen(false)}>
+                📋 Resources
               </Link>
 
               {firebaseUser && (
-                <>
-                  <Link to="/dashboard" className="text-gray-400 hover:text-white py-2" onClick={() => setMobileMenuOpen(false)}>
-                    Dashboard
-                  </Link>
-                  <Link to="/map" className="text-gray-400 hover:text-white py-2" onClick={() => setMobileMenuOpen(false)}>
-                    Map
-                  </Link>
-                  <Link to="/shifts" className="text-gray-400 hover:text-white py-2" onClick={() => setMobileMenuOpen(false)}>
-                    Shifts
-                  </Link>
-                  <Link to="/members" className="text-gray-400 hover:text-white py-2" onClick={() => setMobileMenuOpen(false)}>
-                    Members
-                  </Link>
-                  {isAdmin && (
-                    <Link to="/admin" className="text-neon-purple hover:text-neon-purple/80 py-2" onClick={() => setMobileMenuOpen(false)}>
-                      Admin
-                    </Link>
-                  )}
-                </>
+                <Link to="/dashboard" className={mobileNavClass('/dashboard')} onClick={() => setMobileMenuOpen(false)}>
+                  🏠 Dashboard
+                </Link>
               )}
 
               <div className="pt-3 border-t border-playa-border">

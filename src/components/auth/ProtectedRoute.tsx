@@ -9,7 +9,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRouteProps) {
-  const { firebaseUser, isAdmin, loading } = useAuth();
+  const { firebaseUser, user, isAdmin, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -18,6 +18,17 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
 
   if (!firebaseUser) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (user?.banned) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-playa-dark px-4">
+        <div className="text-center max-w-md">
+          <h1 className="text-2xl font-bold text-white mb-3">Account Suspended</h1>
+          <p className="text-gray-400">Your account has been suspended. Please contact the camp organizers if you believe this is a mistake.</p>
+        </div>
+      </div>
+    );
   }
 
   if (requireAdmin && !isAdmin) {

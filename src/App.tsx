@@ -1,5 +1,6 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { useAuth } from './contexts/AuthContext';
 import { Layout } from './components/layout';
 import { ProtectedRoute } from './components/auth';
 
@@ -9,7 +10,7 @@ import {
   LoginPage,
   RegisterPage,
   AboutPage,
-  InfoPage,
+  InfoPage as ResourcesPage,
   ContactPage,
   WhatsAppRequestPage,
   ReportIssuePage,
@@ -24,12 +25,10 @@ import {
   CampMapPage,
   ShiftsPage,
   MediaPage,
-  ResourcesPage,
 } from './pages/user';
 
 // Admin pages
 import {
-  AdminDashboardPage,
   UserManagementPage,
   MapManagementPage,
   ShiftManagementPage,
@@ -38,6 +37,17 @@ import {
   SiteConfigPage,
 } from './pages/admin';
 
+function HomeRedirect() {
+  const { firebaseUser } = useAuth();
+  if (firebaseUser) return <Navigate to="/dashboard" replace />;
+  return <HomePage />;
+}
+
+function SmartShifts() {
+  const { isAdmin } = useAuth();
+  return isAdmin ? <ShiftManagementPage /> : <ShiftsPage />;
+}
+
 function App() {
   return (
     <BrowserRouter>
@@ -45,11 +55,11 @@ function App() {
         <Layout>
           <Routes>
             {/* Public Routes */}
-            <Route path="/" element={<HomePage />} />
+            <Route path="/" element={<HomeRedirect />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/about" element={<AboutPage />} />
-            <Route path="/info" element={<InfoPage />} />
+            <Route path="/resources" element={<ResourcesPage />} />
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/join-whatsapp" element={<WhatsAppRequestPage />} />
             <Route path="/report" element={<ReportIssuePage />} />
@@ -99,7 +109,7 @@ function App() {
               path="/shifts"
               element={
                 <ProtectedRoute>
-                  <ShiftsPage />
+                  <SmartShifts />
                 </ProtectedRoute>
               }
             />
@@ -111,24 +121,7 @@ function App() {
                 </ProtectedRoute>
               }
             />
-            <Route
-              path="/resources"
-              element={
-                <ProtectedRoute>
-                  <ResourcesPage />
-                </ProtectedRoute>
-              }
-            />
-
             {/* Admin Routes */}
-            <Route
-              path="/admin"
-              element={
-                <ProtectedRoute requireAdmin>
-                  <AdminDashboardPage />
-                </ProtectedRoute>
-              }
-            />
             <Route
               path="/admin/users"
               element={

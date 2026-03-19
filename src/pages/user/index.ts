@@ -5,4 +5,3 @@ export { MemberProfilePage } from './MemberProfilePage';
 export { CampMapPage } from './CampMapPage';
 export { ShiftsPage } from './ShiftsPage';
 export { MediaPage } from './MediaPage';
-export { ResourcesPage } from './ResourcesPage';

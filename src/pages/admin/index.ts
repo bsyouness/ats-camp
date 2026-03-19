@@ -1,4 +1,3 @@
-export { AdminDashboardPage } from './AdminDashboardPage';
 export { UserManagementPage } from './UserManagementPage';
 export { MapManagementPage } from './MapManagementPage';
 export { ShiftManagementPage } from './ShiftManagementPage';

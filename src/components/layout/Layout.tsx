@@ -9,31 +9,35 @@ interface LayoutProps {
 
 export function Layout({ children }: LayoutProps) {
   const { user, previewAsUser, setPreviewAsUser } = useAuth();
+  const isActualAdmin = user?.role === 'admin';
 
   return (
     <div className="min-h-screen flex flex-col bg-playa-dark">
-      {previewAsUser && (
-        <div className="w-full bg-orange-600 text-white text-sm flex items-center justify-between px-4 py-2 z-50">
-          <span>Admin Preview Mode — viewing as member</span>
-          <button
-            onClick={() => setPreviewAsUser(false)}
-            className="ml-4 px-3 py-1 rounded bg-white/20 hover:bg-white/30 font-medium transition-colors"
-          >
-            Exit Preview
-          </button>
-        </div>
-      )}
-      <Header />
-      {user?.role === 'admin' && !previewAsUser && (
-        <div className="fixed top-4 right-4 z-40">
-          <button
-            onClick={() => setPreviewAsUser(true)}
-            className="px-3 py-1.5 rounded-full bg-playa-card border border-playa-border text-xs text-gray-300 hover:text-white hover:border-neon-cyan transition-colors shadow-lg"
-          >
-            Preview as Member
-          </button>
-        </div>
-      )}
+      <div className="sticky top-0 z-50">
+        {isActualAdmin && !previewAsUser && (
+          <div className="w-full bg-neon-purple/10 backdrop-blur-md border-b border-neon-purple/30 text-sm flex items-center justify-between px-4 py-2">
+            <span className="text-neon-purple font-medium">Admin Mode</span>
+            <button
+              onClick={() => setPreviewAsUser(true)}
+              className="px-3 py-1 rounded bg-neon-purple/20 hover:bg-neon-purple/30 text-neon-purple font-medium transition-colors border border-neon-purple/40 text-xs"
+            >
+              Switch to Member View
+            </button>
+          </div>
+        )}
+        {previewAsUser && (
+          <div className="w-full bg-orange-600 text-white text-sm flex items-center justify-between px-4 py-2">
+            <span className="font-medium">Member Preview Mode</span>
+            <button
+              onClick={() => setPreviewAsUser(false)}
+              className="px-3 py-1 rounded bg-white/20 hover:bg-white/30 font-medium transition-colors text-xs"
+            >
+              Switch to Admin Mode
+            </button>
+          </div>
+        )}
+        <Header />
+      </div>
       <main className="flex-1">
         {children}
       </main>

@@ -1,7 +1,19 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../../services/firebase';
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
+  const [whatsappLink, setWhatsappLink] = useState('');
+
+  useEffect(() => {
+    getDoc(doc(db, 'config', 'site')).then((snap) => {
+      if (snap.exists() && snap.data().whatsappGroupLink) {
+        setWhatsappLink(snap.data().whatsappGroupLink);
+      }
+    });
+  }, []);
 
   return (
     <footer className="bg-playa-surface border-t border-playa-border mt-auto">
@@ -19,40 +31,44 @@ export function Footer() {
           <div>
             <h4 className="text-white font-medium mb-4">Quick Links</h4>
             <nav className="flex flex-col gap-2">
-              <Link to="/about" className="text-gray-400 hover:text-white text-sm transition-colors">
-                About Us
+              <Link to="/map" className="text-gray-400 hover:text-white text-sm transition-colors">
+                Camp Map
               </Link>
-              <Link to="/info" className="text-gray-400 hover:text-white text-sm transition-colors">
-                Useful Info
+              <Link to="/shifts" className="text-gray-400 hover:text-white text-sm transition-colors">
+                Shifts
               </Link>
-              <Link to="/contact" className="text-gray-400 hover:text-white text-sm transition-colors">
-                Contact
+              <Link to="/media" className="text-gray-400 hover:text-white text-sm transition-colors">
+                Media
               </Link>
-              <Link to="/join-whatsapp" className="text-gray-400 hover:text-white text-sm transition-colors">
-                Join WhatsApp
+              <Link to="/members" className="text-gray-400 hover:text-white text-sm transition-colors">
+                Members
+              </Link>
+              <Link to="/resources" className="text-gray-400 hover:text-white text-sm transition-colors">
+                Resources
               </Link>
             </nav>
           </div>
 
           <div>
-            <h4 className="text-white font-medium mb-4">Resources</h4>
+            <h4 className="text-white font-medium mb-4">Connect</h4>
             <nav className="flex flex-col gap-2">
-              <a
-                href="https://burningman.org"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-400 hover:text-white text-sm transition-colors"
-              >
-                Burning Man Official
-              </a>
-              <a
-                href="https://iburn.app"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-400 hover:text-white text-sm transition-colors"
-              >
-                iBurn App
-              </a>
+              <Link to="/contact" className="text-gray-400 hover:text-white text-sm transition-colors">
+                Contact Us
+              </Link>
+              {whatsappLink ? (
+                <a
+                  href={whatsappLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-400 hover:text-white text-sm transition-colors"
+                >
+                  Join WhatsApp
+                </a>
+              ) : (
+                <Link to="/resources" className="text-gray-400 hover:text-white text-sm transition-colors">
+                  Join WhatsApp
+                </Link>
+              )}
               <Link to="/report" className="text-gray-400 hover:text-white text-sm transition-colors">
                 Report an Issue
               </Link>

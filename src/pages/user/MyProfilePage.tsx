@@ -1,4 +1,5 @@
 import { useState, FormEvent, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { updateProfile } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useAuth } from '../../contexts/AuthContext';
@@ -240,6 +241,7 @@ function PhotoPickerModal({
 
 export function MyProfilePage() {
   const { user, firebaseUser } = useAuth();
+  const { hash } = useLocation();
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
@@ -266,6 +268,16 @@ export function MyProfilePage() {
       setCurrentPhotoURL(user.photoURL || firebaseUser?.photoURL || null);
     }
   }, [user, firebaseUser]);
+
+  useEffect(() => {
+    if (!hash) return;
+    const id = hash.slice(1);
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.focus();
+    }
+  }, [hash, user]);
 
   async function handlePhotoSave(url: string) {
     if (!firebaseUser) return;
@@ -348,6 +360,7 @@ export function MyProfilePage() {
             />
 
             <Input
+              id="field-playa-name"
               label="Playa Name (optional)"
               placeholder="Your playa name"
               value={playaName}
@@ -359,6 +372,7 @@ export function MyProfilePage() {
                 Bio
               </label>
               <textarea
+                id="field-bio"
                 className="w-full px-4 py-2.5 bg-playa-card border border-playa-border rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan transition-colors min-h-[100px] resize-y"
                 placeholder="Tell us about yourself..."
                 value={bio}
@@ -374,6 +388,7 @@ export function MyProfilePage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <Input
+              id="field-years-attended"
               label="Years Attended"
               placeholder="2019, 2022, 2023"
               value={yearsAttended}
