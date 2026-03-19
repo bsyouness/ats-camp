@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getPublishedShifts, signUpForSlot, cancelSlotSignUp } from '../../services/shifts';
 import { getAllUsers } from '../../services/users';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { Shift, User } from '../../types';
 import { Button, Loading, Modal } from '../../components/ui';
 import { ShiftCalendar } from '../../components/shifts/ShiftCalendar';

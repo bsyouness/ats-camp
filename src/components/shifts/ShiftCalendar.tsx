@@ -70,6 +70,31 @@ function formatDayHeader(date: Date): string {
   return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
+function normalizeDate(date: Date): Date {
+  const normalized = new Date(date);
+  normalized.setHours(0, 0, 0, 0);
+  return normalized;
+}
+
+function shiftDateToDate(shift: Shift): Date {
+  return normalizeDate((shift.date as unknown as { toDate: () => Date }).toDate());
+}
+
+function dateKey(date: Date): string {
+  return normalizeDate(date).toISOString().split('T')[0];
+}
+
+function findPreferredDate(shifts: Shift[]): Date | null {
+  if (shifts.length === 0) return null;
+
+  const today = normalizeDate(new Date());
+  const sortedShiftDates = [...shifts]
+    .map((shift) => shiftDateToDate(shift))
+    .sort((a, b) => a.getTime() - b.getTime());
+
+  return sortedShiftDates.find((date) => date.getTime() >= today.getTime()) ?? sortedShiftDates[0];
+}
+
 function getShiftColor(shift: Shift, myUid: string | null): string {
   if (!myUid) {
     const open = shift.slots.some((s) => !s.assignedTo && !s.preAssigned);
@@ -148,11 +173,9 @@ export function ShiftCalendar({
   const draggedShiftIdRef = useRef<string | null>(null);
   const suppressClickRef = useRef(false);
   const [view, setView] = useState<'week' | 'day'>('week');
-  const [currentDate, setCurrentDate] = useState<Date>(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  });
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const preferredDate = useMemo(() => findPreferredDate(shifts), [shifts]);
+  const currentDate = selectedDate ?? preferredDate ?? normalizeDate(new Date());
 
   useEffect(() => {
     const scrollOffset = (8 - DAY_START_HOUR) * HOUR_HEIGHT;
@@ -160,50 +183,24 @@ export function ShiftCalendar({
     if (view === 'day' && dayScrollRef.current) dayScrollRef.current.scrollTop = scrollOffset;
   }, [view]);
 
-  useEffect(() => {
-    if (shifts.length === 0) return;
-
-    const normalizedCurrentDate = new Date(currentDate);
-    normalizedCurrentDate.setHours(0, 0, 0, 0);
-    const normalizedToday = new Date();
-    normalizedToday.setHours(0, 0, 0, 0);
-
-    const hasShiftInCurrentWeek = shifts.some((shift) => {
-      const shiftDate = (shift.date as unknown as { toDate: () => Date }).toDate();
-      const shiftDay = new Date(shiftDate);
-      shiftDay.setHours(0, 0, 0, 0);
-      const diffDays = Math.floor(
-        (shiftDay.getTime() - startOfWeek(normalizedCurrentDate).getTime()) / (24 * 60 * 60 * 1000),
-      );
-      return diffDays >= 0 && diffDays < 7;
-    });
-
-    if (hasShiftInCurrentWeek) return;
-
-    const sortedShiftDates = [...shifts]
-      .map((shift) => {
-        const shiftDate = (shift.date as unknown as { toDate: () => Date }).toDate();
-        const normalizedDate = new Date(shiftDate);
-        normalizedDate.setHours(0, 0, 0, 0);
-        return normalizedDate;
-      })
-      .sort((a, b) => a.getTime() - b.getTime());
-
-    const nextShiftDate =
-      sortedShiftDates.find((date) => date.getTime() >= normalizedToday.getTime()) ?? sortedShiftDates[0];
-
-    if (!sameDay(nextShiftDate, normalizedCurrentDate)) {
-      setCurrentDate(nextShiftDate);
-    }
-  }, [currentDate, shifts]);
-
   const weekStart = useMemo(() => startOfWeek(currentDate), [currentDate]);
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
   const hours = useMemo(() => Array.from({ length: TOTAL_HOURS }, (_, i) => DAY_START_HOUR + i), []);
-
-  const getShiftsForDay = (day: Date) =>
-    shifts.filter((shift) => sameDay((shift.date as unknown as { toDate: () => Date }).toDate(), day));
-  const dayShifts = useMemo(() => getShiftsForDay(currentDate), [currentDate, shifts]);
+  const shiftsByDay = useMemo(() => {
+    const grouped = new Map<string, Shift[]>();
+    for (const shift of shifts) {
+      const key = dateKey(shiftDateToDate(shift));
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.push(shift);
+      } else {
+        grouped.set(key, [shift]);
+      }
+    }
+    return grouped;
+  }, [shifts]);
+  const getShiftsForDay = (day: Date) => shiftsByDay.get(dateKey(day)) ?? [];
+  const dayShifts = getShiftsForDay(currentDate);
   const dayColumnMap = useMemo(() => assignColumns(dayShifts), [dayShifts]);
   const getOpenShiftCountForDay = (day: Date) =>
     getShiftsForDay(day).filter((shift) => shift.slots.some((slot) => !slot.assignedTo && !slot.preAssigned)).length;
@@ -363,11 +360,11 @@ export function ShiftCalendar({
     <div>
       <div className="flex items-center gap-2 mb-6">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => setCurrentDate(addDays(weekStart, -7))}>
+          <Button variant="ghost" size="sm" onClick={() => setSelectedDate(addDays(weekStart, -7))}>
             ← Prev
           </Button>
           <span className="text-white font-medium">{formatWeekRange(weekStart)}</span>
-          <Button variant="ghost" size="sm" onClick={() => setCurrentDate(addDays(weekStart, 7))}>
+          <Button variant="ghost" size="sm" onClick={() => setSelectedDate(addDays(weekStart, 7))}>
             Next →
           </Button>
         </div>
@@ -419,7 +416,7 @@ export function ShiftCalendar({
                   key={day.toISOString()}
                   className={`flex-1 text-center py-2 text-xs font-medium border-l border-playa-border/20 cursor-pointer transition-colors hover:bg-playa-surface/60 ${isToday ? 'text-neon-orange' : 'text-gray-400'}`}
                   onClick={() => {
-                    setCurrentDate(day);
+                    setSelectedDate(day);
                     setView('day');
                   }}
                 >
@@ -490,7 +487,7 @@ export function ShiftCalendar({
       ) : (
         <div>
           <div className="flex items-center justify-between mb-4">
-            <Button variant="ghost" size="sm" onClick={() => setCurrentDate(addDays(currentDate, -1))}>
+            <Button variant="ghost" size="sm" onClick={() => setSelectedDate(addDays(currentDate, -1))}>
               ← Prev Day
             </Button>
             <button
@@ -499,7 +496,7 @@ export function ShiftCalendar({
             >
               {formatDayHeader(currentDate)}
             </button>
-            <Button variant="ghost" size="sm" onClick={() => setCurrentDate(addDays(currentDate, 1))}>
+            <Button variant="ghost" size="sm" onClick={() => setSelectedDate(addDays(currentDate, 1))}>
               Next Day →
             </Button>
           </div>

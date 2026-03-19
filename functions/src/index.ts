@@ -6,10 +6,8 @@ import * as fs from 'fs';
 import { onObjectFinalized } from 'firebase-functions/v2/storage';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as ffmpeg from 'fluent-ffmpeg';
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg') as { path: string };
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const sgMail = require('@sendgrid/mail') as typeof import('@sendgrid/mail');
+import ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
+import sgMail = require('@sendgrid/mail');
 
 admin.initializeApp();
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
@@ -280,7 +278,7 @@ export const sendMediaExpiryReminders = onSchedule(
             from: 'noreply@ats-camp.com',
             subject: threshold.subject,
             text: `Your uploaded media will expire on ${expiryDate}. Log in to download or re-upload it before it's removed.\n\nhttps://ats-camp.web.app/media`,
-            html: `<p>Your uploaded media will expire on <strong>${expiryDate}</strong>.</p><p>Log in to download or re-upload it before it\'s removed.</p><p><a href="https://ats-camp.web.app/media">View your media</a></p>`,
+            html: `<p>Your uploaded media will expire on <strong>${expiryDate}</strong>.</p><p>Log in to download or re-upload it before it's removed.</p><p><a href="https://ats-camp.web.app/media">View your media</a></p>`,
           });
 
           await docSnap.ref.update({

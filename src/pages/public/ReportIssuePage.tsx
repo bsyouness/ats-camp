@@ -28,7 +28,7 @@ export function ReportIssuePage() {
         handled: false,
       });
       setSubmitted(true);
-    } catch (err) {
+    } catch {
       setError('Failed to submit report. Please try again.');
     } finally {
       setIsLoading(false);

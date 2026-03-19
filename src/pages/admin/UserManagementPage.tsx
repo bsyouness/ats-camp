@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getAllUsers, setUserRole, assignTentNumber, setBanned, removeUser } from '../../services/users';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { User } from '../../types';
 import { Card, CardContent, Button, Input, Loading, Modal } from '../../components/ui';
 

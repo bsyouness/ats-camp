@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Timestamp } from 'firebase/firestore';
 import { getAllShifts, createShift, updateShift, deleteShift } from '../../services/shifts';
 import { getAllUsers } from '../../services/users';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { Shift, ShiftSlot, User } from '../../types';
 import { Button, Input, Loading, Modal } from '../../components/ui';
 import { ShiftCalendar } from '../../components/shifts/ShiftCalendar';

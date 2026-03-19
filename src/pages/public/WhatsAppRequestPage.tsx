@@ -28,7 +28,7 @@ export function WhatsAppRequestPage() {
         handled: false,
       });
       setSubmitted(true);
-    } catch (err) {
+    } catch {
       setError('Failed to submit request. Please try again.');
     } finally {
       setIsLoading(false);

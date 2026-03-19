@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Button } from '../../components/ui';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 
 export function HomePage() {
   const { firebaseUser } = useAuth();

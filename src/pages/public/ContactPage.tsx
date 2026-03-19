@@ -2,12 +2,11 @@ import { useState, FormEvent } from 'react';
 import { collection, addDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { Button, Input, Card, CardContent } from '../../components/ui';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { ContactsPage } from '../admin/ContactsPage';
 
 export function ContactPage() {
   const { isAdmin } = useAuth();
-  if (isAdmin) return <ContactsPage />;
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
@@ -30,12 +29,14 @@ export function ContactPage() {
         handled: false,
       });
       setSubmitted(true);
-    } catch (err) {
+    } catch {
       setError('Failed to send message. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
+
+  if (isAdmin) return <ContactsPage />;
 
   if (submitted) {
     return (

@@ -2,7 +2,7 @@ import { useState, FormEvent, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { updateProfile } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { updateUser } from '../../services/users';
 import { getMyMedia, compressImage } from '../../services/media';
 import { storage } from '../../services/firebase';
@@ -321,7 +321,7 @@ export function MyProfilePage() {
 
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
-    } catch (err) {
+    } catch {
       setError('Failed to update profile. Please try again.');
     } finally {
       setIsLoading(false);

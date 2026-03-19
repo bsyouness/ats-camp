@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui';
 import { getAllContacts } from '../../services/contacts';
 import { getPublishedShifts } from '../../services/shifts';

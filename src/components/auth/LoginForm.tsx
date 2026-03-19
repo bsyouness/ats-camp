@@ -29,7 +29,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         await signIn(email, password);
       }
       onSuccess?.();
-    } catch (err) {
+    } catch {
       setError('Invalid email or password');
     } finally {
       setIsLoading(false);

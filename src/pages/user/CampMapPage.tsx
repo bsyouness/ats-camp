@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { getCurrentCampMap, uploadCampMap } from '../../services/campMap';
 import { getAllUsers } from '../../services/users';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { CampMap, User } from '../../types';
 import { Card, CardContent, Loading, Button } from '../../components/ui';
 

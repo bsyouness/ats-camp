@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { getAllMedia, uploadMedia, getMediaType, deleteMedia } from '../../services/media';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { Media } from '../../types';
 import { Card, CardContent, Button, Loading, Modal } from '../../components/ui';
 
