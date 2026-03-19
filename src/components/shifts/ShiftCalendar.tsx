@@ -95,9 +95,13 @@ function findPreferredDate(shifts: Shift[]): Date | null {
   return sortedShiftDates.find((date) => date.getTime() >= today.getTime()) ?? sortedShiftDates[0];
 }
 
+function getOpenSlotCount(shift: Shift): number {
+  return shift.slots.filter((slot) => !slot.assignedTo && !slot.preAssigned).length;
+}
+
 function getShiftColor(shift: Shift, myUid: string | null): string {
   if (!myUid) {
-    const open = shift.slots.some((s) => !s.assignedTo && !s.preAssigned);
+    const open = getOpenSlotCount(shift) > 0;
     return open
       ? 'bg-neon-cyan/20 border-neon-cyan/60 text-neon-cyan'
       : 'bg-playa-surface border-playa-border text-gray-400';
@@ -106,7 +110,7 @@ function getShiftColor(shift: Shift, myUid: string | null): string {
   const hasMySlot = shift.slots.some((s) => s.assignedTo === myUid);
   if (hasMySlot) return 'bg-neon-orange/20 border-neon-orange/60 text-neon-orange';
 
-  const open = shift.slots.some((s) => !s.assignedTo && !s.preAssigned);
+  const open = getOpenSlotCount(shift) > 0;
   if (open) return 'bg-neon-cyan/20 border-neon-cyan/60 text-neon-cyan';
   return 'bg-playa-surface border-playa-border text-gray-400';
 }
@@ -202,8 +206,8 @@ export function ShiftCalendar({
   const getShiftsForDay = (day: Date) => shiftsByDay.get(dateKey(day)) ?? [];
   const dayShifts = getShiftsForDay(currentDate);
   const dayColumnMap = useMemo(() => assignColumns(dayShifts), [dayShifts]);
-  const getOpenShiftCountForDay = (day: Date) =>
-    getShiftsForDay(day).filter((shift) => shift.slots.some((slot) => !slot.assignedTo && !slot.preAssigned)).length;
+  const getOpenSlotCountForDay = (day: Date) =>
+    getShiftsForDay(day).reduce((total, shift) => total + getOpenSlotCount(shift), 0);
 
   const getUserInitials = (uid: string) => {
     const user = users.find((candidate) => candidate.uid === uid);
@@ -291,7 +295,7 @@ export function ShiftCalendar({
     const color = getShiftColor(shift, myUid);
     const unpublished = isAdmin && shift.published === false;
     const assignedUids = shift.slots.filter((slot) => slot.assignedTo).map((slot) => slot.assignedTo!);
-    const openSlots = shift.slots.filter((slot) => !slot.assignedTo && !slot.preAssigned).length;
+    const openSlots = getOpenSlotCount(shift);
     const filledSlots = shift.slots.filter((slot) => slot.assignedTo).length;
     const hasMySlot = !!myUid && shift.slots.some((slot) => slot.assignedTo === myUid);
 
@@ -410,7 +414,7 @@ export function ShiftCalendar({
             <div className="w-12 flex-shrink-0 border-r border-playa-border/30" />
             {weekDays.map((day) => {
               const isToday = sameDay(day, new Date());
-              const openShiftCount = getOpenShiftCountForDay(day);
+              const openSlotCount = getOpenSlotCountForDay(day);
               return (
                 <div
                   key={day.toISOString()}
@@ -422,9 +426,9 @@ export function ShiftCalendar({
                 >
                   <div>{day.toLocaleDateString('en-US', { weekday: 'short' })}</div>
                   <div className={`text-base ${isToday ? 'font-bold' : ''}`}>{day.getDate()}</div>
-                  {openShiftCount > 0 && (
+                  {openSlotCount > 0 && (
                     <div className="mt-1 inline-flex rounded-full bg-neon-cyan/20 px-2 py-0.5 text-[10px] font-medium text-neon-cyan">
-                      {openShiftCount} open
+                      {openSlotCount} open
                     </div>
                   )}
                 </div>
@@ -500,10 +504,10 @@ export function ShiftCalendar({
               Next Day →
             </Button>
           </div>
-          {getOpenShiftCountForDay(currentDate) > 0 && (
+          {getOpenSlotCountForDay(currentDate) > 0 && (
             <div className="mb-4">
               <span className="inline-flex rounded-full bg-neon-cyan/20 px-3 py-1 text-xs font-medium text-neon-cyan">
-                {getOpenShiftCountForDay(currentDate)} open shifts today
+                {getOpenSlotCountForDay(currentDate)} open slots today
               </span>
             </div>
           )}
