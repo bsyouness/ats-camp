@@ -20,10 +20,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (fbUser) {
         try {
           const userData = await getUser(fbUser.uid);
-          setUser(userData);
+          if (userData) {
+            setUser(userData);
+          } else {
+            // Confirmed missing profile doc: end the session instead of leaving a ghost login.
+            await auth.signOut();
+            setUser(null);
+          }
         } catch (error) {
           console.error('Error fetching user data:', error);
-          setUser(null);
+          // Keep the session for transient fetch failures; only sign out on confirmed absence.
         }
       } else {
         setUser(null);
