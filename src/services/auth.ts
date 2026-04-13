@@ -14,6 +14,10 @@ import { createUser, getUser, getUserByEmail, updateUser } from './users';
 import { LoginMethod, User } from '../types';
 
 const googleProvider = new GoogleAuthProvider();
+const getLoginMethodForEmailFn = httpsCallable<
+  { email: string },
+  { exists: boolean; uid: string | null; loginMethod: LoginMethod | null }
+>(functions, 'getLoginMethodForEmail');
 
 class AuthMethodError extends Error {
   code = 'auth/wrong-login-method';
@@ -53,26 +57,33 @@ async function persistLoginMethodIfMissing(user: User | null, method: LoginMetho
   }
 }
 
+async function lookupAccountByEmail(email: string): Promise<{ exists: boolean; uid: string | null; loginMethod: LoginMethod | null }> {
+  const result = await getLoginMethodForEmailFn({ email: normalizeEmail(email) });
+  return result.data;
+}
+
+async function tryLookupAccountByEmail(email: string): Promise<{ exists: boolean; uid: string | null; loginMethod: LoginMethod | null } | null> {
+  try {
+    return await lookupAccountByEmail(email);
+  } catch (error) {
+    console.warn('Login method precheck unavailable, falling back to post-auth validation.', error);
+    return null;
+  }
+}
+
 export async function signUp(email: string, password: string, displayName: string) {
   const normalizedEmail = normalizeEmail(email);
-
-  // Create the Firebase Auth user first — this signs them in, enabling Firestore reads below.
-  // auth/email-already-in-use is thrown here for existing email+password or Google accounts.
-  const userCredential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
-
-  await updateProfile(userCredential.user, { displayName });
-
-  // Now authenticated: check if a Firestore doc already exists (e.g. a HubID account with
-  // the same email that Firebase Auth wasn't aware of).
-  const existingUser = await getUserByEmail(normalizedEmail);
-  if (existingUser) {
-    await firebaseSignOut(auth);
-    await userCredential.user.delete();
-    const method = existingUser.loginMethod ?? 'email';
+  const existingAccount = await tryLookupAccountByEmail(normalizedEmail);
+  if (existingAccount?.exists) {
+    const method = existingAccount.loginMethod ?? 'email';
     throw new AuthMethodError(
       `An account with this email already exists and uses ${getLoginMethodLabel(method)}.`,
     );
   }
+
+  const userCredential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
+
+  await updateProfile(userCredential.user, { displayName });
 
   await createUser({
     uid: userCredential.user.uid,
@@ -86,12 +97,27 @@ export async function signUp(email: string, password: string, displayName: strin
 
 export async function signIn(email: string, password: string) {
   const normalizedEmail = normalizeEmail(email);
-  const existingUser = await getUserByEmail(normalizedEmail);
-  if (existingUser) {
-    await ensureLoginMethod(existingUser, 'email');
+  const existingAccount = await tryLookupAccountByEmail(normalizedEmail);
+  if (existingAccount?.exists && existingAccount.loginMethod && existingAccount.loginMethod !== 'email') {
+    throw new AuthMethodError(
+      `This account uses ${getLoginMethodLabel(existingAccount.loginMethod)}. Sign in with that method.`,
+    );
   }
 
   const userCredential = await signInWithEmailAndPassword(auth, normalizedEmail, password);
+  const existingUser = existingAccount?.uid
+    ? await getUser(existingAccount.uid)
+    : await getUserByEmail(normalizedEmail);
+
+  if (existingUser) {
+    try {
+      await ensureLoginMethod(existingUser, 'email');
+    } catch (error) {
+      await firebaseSignOut(auth);
+      throw error;
+    }
+  }
+
   await persistLoginMethodIfMissing(existingUser, 'email');
   return userCredential.user;
 }
@@ -105,10 +131,10 @@ export async function signInWithGoogle() {
   }
 
   const existingUser = await getUser(userCredential.user.uid);
-  const existingUserByEmail = await getUserByEmail(email);
+  const existingAccountByEmail = await lookupAccountByEmail(email);
 
-  if (existingUserByEmail && existingUserByEmail.uid !== userCredential.user.uid) {
-    const method = existingUserByEmail.loginMethod ?? 'email';
+  if (existingAccountByEmail.exists && existingAccountByEmail.uid !== userCredential.user.uid) {
+    const method = existingAccountByEmail.loginMethod ?? 'email';
     await firebaseSignOut(auth);
     throw new AuthMethodError(
       `This email is already registered with ${getLoginMethodLabel(method)}.`,
@@ -146,9 +172,11 @@ export async function resetPassword(email: string) {
 
 export async function signInWithHubId(email: string, password: string) {
   const normalizedEmail = normalizeEmail(email);
-  const existingUserByEmail = await getUserByEmail(normalizedEmail);
-  if (existingUserByEmail) {
-    await ensureLoginMethod(existingUserByEmail, 'hubid');
+  const existingAccount = await tryLookupAccountByEmail(normalizedEmail);
+  if (existingAccount?.exists && existingAccount.loginMethod && existingAccount.loginMethod !== 'hubid') {
+    throw new AuthMethodError(
+      `This account uses ${getLoginMethodLabel(existingAccount.loginMethod)}. Sign in with that method.`,
+    );
   }
 
   const signInWithHubIdFn = httpsCallable<
@@ -165,9 +193,13 @@ export async function signInWithHubId(email: string, password: string) {
   // Create or update user in Firestore
   const existingUser = await getUser(userCredential.user.uid);
   const normalizedUserEmail = normalizeEmail(user.email);
-  const emailOwner = await getUserByEmail(normalizedUserEmail);
+  const emailOwner = (await tryLookupAccountByEmail(normalizedUserEmail)) ?? {
+    exists: false,
+    uid: null,
+    loginMethod: null,
+  };
 
-  if (emailOwner && emailOwner.uid !== userCredential.user.uid) {
+  if (emailOwner.exists && emailOwner.uid !== userCredential.user.uid) {
     await firebaseSignOut(auth);
     throw new AuthMethodError(
       `This email is already registered with ${getLoginMethodLabel(emailOwner.loginMethod ?? 'email')}.`,

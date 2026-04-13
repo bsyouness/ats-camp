@@ -34,6 +34,8 @@ interface HubIdUserData {
   memberships?: string[];
 }
 
+type LoginMethod = 'email' | 'google' | 'hubid';
+
 async function getHubIdAccessToken(email: string, password: string): Promise<string> {
   const params = new URLSearchParams({
     grant_type: 'password',
@@ -103,6 +105,34 @@ async function getHubIdUserData(accessToken: string): Promise<HubIdUserData> {
   const result = await response.json();
   return result.data || result;
 }
+
+export const getLoginMethodForEmail = functions.https.onCall(async (request) => {
+  const email = String(request.data?.email || '').trim().toLowerCase();
+
+  if (!email) {
+    throw new functions.https.HttpsError('invalid-argument', 'Email is required');
+  }
+
+  const snapshot = await admin
+    .firestore()
+    .collection('users')
+    .where('email', '==', email)
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) {
+    return { exists: false, uid: null, loginMethod: null };
+  }
+
+  const doc = snapshot.docs[0];
+  const data = doc.data() as { loginMethod?: LoginMethod };
+
+  return {
+    exists: true,
+    uid: doc.id,
+    loginMethod: data.loginMethod ?? null,
+  };
+});
 
 export const signInWithHubId = functions.https.onCall(async (request) => {
   const { email, password } = request.data;
