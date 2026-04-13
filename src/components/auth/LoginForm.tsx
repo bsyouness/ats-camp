@@ -103,6 +103,14 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
             required
           />
 
+          {loginMethod === 'email' && (
+            <div className="text-right -mt-2">
+              <Link to="/forgot-password" className="text-sm text-neon-cyan hover:underline">
+                Forgot password?
+              </Link>
+            </div>
+          )}
+
           {error && (
             <p className="text-red-400 text-sm">{error}</p>
           )}

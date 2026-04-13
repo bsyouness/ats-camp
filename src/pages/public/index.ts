@@ -6,3 +6,4 @@ export { InfoPage } from './InfoPage';
 export { ContactPage } from './ContactPage';
 export { WhatsAppRequestPage } from './WhatsAppRequestPage';
 export { ReportIssuePage } from './ReportIssuePage';
+export { ForgotPasswordPage } from './ForgotPasswordPage';

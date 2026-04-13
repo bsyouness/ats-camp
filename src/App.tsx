@@ -14,6 +14,7 @@ import {
   ContactPage,
   WhatsAppRequestPage,
   ReportIssuePage,
+  ForgotPasswordPage,
 } from './pages/public';
 
 // User pages
@@ -63,6 +64,7 @@ function App() {
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/join-whatsapp" element={<WhatsAppRequestPage />} />
             <Route path="/report" element={<ReportIssuePage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
             {/* Protected User Routes */}
             <Route
