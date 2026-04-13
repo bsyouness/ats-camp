@@ -3,7 +3,6 @@ import {
   getDoc,
   setDoc,
   updateDoc,
-  deleteDoc,
   collection,
   getDocs,
   query,
@@ -11,10 +10,16 @@ import {
   where,
   Timestamp,
 } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { db } from './firebase';
+import { functions } from './firebase';
 import { LoginMethod, User } from '../types';
 
 const USERS_COLLECTION = 'users';
+const deleteUserCompletelyFn = httpsCallable<{ uid: string }, { success: boolean }>(
+  functions,
+  'deleteUserCompletely',
+);
 
 export async function createUser(data: {
   uid: string;
@@ -97,6 +102,5 @@ export async function setBanned(uid: string, banned: boolean): Promise<void> {
 }
 
 export async function removeUser(uid: string): Promise<void> {
-  const userRef = doc(db, USERS_COLLECTION, uid);
-  await deleteDoc(userRef);
+  await deleteUserCompletelyFn({ uid });
 }

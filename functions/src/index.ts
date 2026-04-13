@@ -36,6 +36,17 @@ interface HubIdUserData {
 
 type LoginMethod = 'email' | 'google' | 'hubid';
 
+async function requireAdminCaller(request: functions.https.CallableRequest<unknown>) {
+  if (!request.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+  }
+
+  const caller = await admin.firestore().collection('users').doc(request.auth.uid).get();
+  if (!caller.exists || caller.data()?.role !== 'admin') {
+    throw new functions.https.HttpsError('permission-denied', 'Admin access required');
+  }
+}
+
 async function getHubIdAccessToken(email: string, password: string): Promise<string> {
   const params = new URLSearchParams({
     grant_type: 'password',
@@ -132,6 +143,29 @@ export const getLoginMethodForEmail = functions.https.onCall(async (request) => 
     uid: doc.id,
     loginMethod: data.loginMethod ?? null,
   };
+});
+
+export const deleteUserCompletely = functions.https.onCall(async (request) => {
+  await requireAdminCaller(request);
+
+  const uid = String(request.data?.uid || '').trim();
+  if (!uid) {
+    throw new functions.https.HttpsError('invalid-argument', 'UID is required');
+  }
+
+  const db = admin.firestore();
+
+  try {
+    await admin.auth().deleteUser(uid);
+  } catch (error) {
+    const err = error as { code?: string };
+    if (err.code !== 'auth/user-not-found') {
+      throw new functions.https.HttpsError('internal', 'Failed to delete Firebase Auth user');
+    }
+  }
+
+  await db.collection('users').doc(uid).delete();
+  return { success: true };
 });
 
 export const signInWithHubId = functions.https.onCall(async (request) => {

@@ -227,7 +227,7 @@ export function UserManagementPage() {
           <p className="text-gray-400">
             Are you sure you want to remove{' '}
             <span className="text-white font-medium">{confirmRemove?.displayName}</span>?
-            This will delete their profile data and cannot be undone.
+            This will delete their profile and login account and cannot be undone.
           </p>
           <div className="flex gap-3 justify-end">
             <Button variant="secondary" onClick={() => setConfirmRemove(null)}>Cancel</Button>

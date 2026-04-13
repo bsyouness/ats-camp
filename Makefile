@@ -1,4 +1,4 @@
-.PHONY: dev preview build deploy deploy-rules
+.PHONY: dev preview build deploy deploy-rules deploy-functions make-admin delete-user
 
 # Start the local dev server with hot-reload
 dev:
@@ -27,3 +27,9 @@ deploy-functions:
 # Promote a user to admin by email. Usage: make make-admin EMAIL=user@example.com
 make-admin:
 	GOOGLE_APPLICATION_CREDENTIALS=$(GOOGLE_APPLICATION_CREDENTIALS) node scripts/make-admin.cjs $(EMAIL)
+
+# Delete a user completely from Firestore and Firebase Auth.
+# Usage: make delete-user EMAIL=user@example.com
+#    or: make delete-user UID=someUid
+delete-user:
+	GOOGLE_APPLICATION_CREDENTIALS=$(GOOGLE_APPLICATION_CREDENTIALS) node scripts/delete-user.cjs $(if $(EMAIL),--email $(EMAIL),$(if $(UID),--uid $(UID),))
