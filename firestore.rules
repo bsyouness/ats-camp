@@ -16,22 +16,29 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
+    function isApprovedUser() {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.approved != false;
+    }
+
     function isValidLoginMethod(value) {
       return value in ['email', 'google', 'hubid'];
     }
 
     // Users collection
     match /users/{userId} {
-      // Anyone authenticated can read all users (for member directory)
-      allow read: if isAuthenticated();
+      // Owners can always read their own doc; approved users/admins can read the directory.
+      allow read: if isOwner(userId) || isApprovedUser() || isAdmin();
 
       // Users can create their own document during registration
-      allow create: if isOwner(userId);
+      allow create: if isOwner(userId) &&
+        request.resource.data.approved == false &&
+        request.resource.data.role == 'member';
 
-      // Users can update their own profile fields (but not role)
-      allow update: if isOwner(userId) &&
+      // Approved users can update their own profile fields (but not role/approval)
+      allow update: if isOwner(userId) && isApprovedUser() &&
         (
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'loginMethod']) ||
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'loginMethod', 'approved']) ||
           (
             resource.data.loginMethod == null &&
             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['loginMethod']) &&
@@ -39,7 +46,13 @@ service cloud.firestore {
           )
         );
 
-      // Admins can update any user (including role)
+      // Allow one-time loginMethod backfill even before approval.
+      allow update: if isOwner(userId) &&
+        resource.data.loginMethod == null &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['loginMethod']) &&
+        isValidLoginMethod(request.resource.data.loginMethod);
+
+      // Admins can update any user (including role/approval)
       allow update: if isAdmin();
 
       // No one can delete users
@@ -48,21 +61,21 @@ service cloud.firestore {
 
     // Shifts collection
     match /shifts/{shiftId} {
-      // Authenticated users can read shifts
-      allow read: if isAuthenticated();
+      // Approved users can read shifts
+      allow read: if isApprovedUser();
 
       // Only admins can create/delete shifts
       allow create, delete: if isAdmin();
 
       // Admins can update anything, members can only update slots (for sign-up)
-      allow update: if isAdmin() || (isAuthenticated() &&
+      allow update: if isAdmin() || (isApprovedUser() &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['slots']));
     }
 
     // Camp Maps collection
     match /campMaps/{year} {
-      // Authenticated users can read maps
-      allow read: if isAuthenticated();
+      // Approved users can read maps
+      allow read: if isApprovedUser();
 
       // Only admins can create/update/delete maps
       allow create, update, delete: if isAdmin();
@@ -70,16 +83,16 @@ service cloud.firestore {
 
     // Media collection
     match /media/{mediaId} {
-      // Authenticated users can read all media
-      allow read: if isAuthenticated();
+      // Approved users can read all media
+      allow read: if isApprovedUser();
 
-      // Authenticated users can create media
-      allow create: if isAuthenticated() &&
+      // Approved users can create media
+      allow create: if isApprovedUser() &&
         request.resource.data.uploadedBy == request.auth.uid;
 
       // Users can delete their own media, admins can delete any
       allow delete: if isAdmin() ||
-        (isAuthenticated() && resource.data.uploadedBy == request.auth.uid);
+        (isApprovedUser() && resource.data.uploadedBy == request.auth.uid);
 
       // No updates to media (immutable once created)
       allow update: if false;

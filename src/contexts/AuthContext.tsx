@@ -52,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     firebaseUser,
     user,
     loading,
-    isAdmin: user?.role === 'admin' && !previewAsUser,
+    isAdmin: user?.role === 'admin' && user?.approved !== false && !previewAsUser,
     previewAsUser,
     setPreviewAsUser,
   };

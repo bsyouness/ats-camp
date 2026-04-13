@@ -7,6 +7,7 @@ export interface User {
   uid: string;
   email: string;
   loginMethod?: LoginMethod;
+  approved?: boolean;
   role: UserRole;
   createdAt: Timestamp;
   displayName: string;

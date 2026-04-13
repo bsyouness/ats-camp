@@ -34,6 +34,7 @@ export async function createUser(data: {
     uid: data.uid,
     email: data.email.trim().toLowerCase(),
     loginMethod: data.loginMethod,
+    approved: false,
     role: 'member',
     createdAt: Timestamp.now(),
     displayName: data.displayName,
@@ -99,6 +100,11 @@ export async function assignTentNumber(uid: string, tentNumber: number | null): 
 export async function setBanned(uid: string, banned: boolean): Promise<void> {
   const userRef = doc(db, USERS_COLLECTION, uid);
   await updateDoc(userRef, { banned });
+}
+
+export async function setApproved(uid: string, approved: boolean): Promise<void> {
+  const userRef = doc(db, USERS_COLLECTION, uid);
+  await updateDoc(userRef, { approved });
 }
 
 export async function removeUser(uid: string): Promise<void> {

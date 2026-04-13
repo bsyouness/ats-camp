@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getAllUsers, setUserRole, assignTentNumber, setBanned, removeUser } from '../../services/users';
+import { getAllUsers, setUserRole, assignTentNumber, setBanned, setApproved, removeUser } from '../../services/users';
 import { useAuth } from '../../contexts/useAuth';
 import { User } from '../../types';
 import { Card, CardContent, Button, Input, Loading, Modal } from '../../components/ui';
@@ -43,6 +43,15 @@ export function UserManagementPage() {
       await fetchUsers();
     } catch (error) {
       console.error('Error toggling ban:', error);
+    }
+  };
+
+  const handleApprovalToggle = async (user: User) => {
+    try {
+      await setApproved(user.uid, user.approved === false);
+      await fetchUsers();
+    } catch (error) {
+      console.error('Error toggling approval:', error);
     }
   };
 
@@ -111,6 +120,7 @@ export function UserManagementPage() {
                 <tr className="border-b border-playa-border">
                   <th className="text-left py-4 px-4 text-gray-400 font-medium">User</th>
                   <th className="text-left py-4 px-4 text-gray-400 font-medium">Email</th>
+                  <th className="text-left py-4 px-4 text-gray-400 font-medium">Status</th>
                   <th className="text-left py-4 px-4 text-gray-400 font-medium">Tent #</th>
                   <th className="text-left py-4 px-4 text-gray-400 font-medium">Role</th>
                   <th className="text-left py-4 px-4 text-gray-400 font-medium">Actions</th>
@@ -141,6 +151,17 @@ export function UserManagementPage() {
                       </td>
                       <td className="py-4 px-4 text-gray-400">{user.email}</td>
                       <td className="py-4 px-4">
+                        {user.approved === false ? (
+                          <span className="px-2 py-1 rounded bg-yellow-500/20 text-yellow-400 text-xs font-medium">
+                            Pending
+                          </span>
+                        ) : (
+                          <span className="px-2 py-1 rounded bg-green-500/20 text-green-400 text-xs font-medium">
+                            Approved
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-4 px-4">
                         {user.tentNumber ? (
                           <span className="px-2 py-1 bg-neon-orange/20 text-neon-orange rounded">#{user.tentNumber}</span>
                         ) : (
@@ -165,6 +186,16 @@ export function UserManagementPage() {
                           </Button>
                           {!isSelf && (
                             <>
+                              <button
+                                onClick={() => handleApprovalToggle(user)}
+                                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                                  user.approved === false
+                                    ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+                                    : 'bg-gray-500/20 text-gray-300 hover:bg-gray-500/30'
+                                }`}
+                              >
+                                {user.approved === false ? 'Approve' : 'Unapprove'}
+                              </button>
                               <button
                                 onClick={() => handleBanToggle(user)}
                                 className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
