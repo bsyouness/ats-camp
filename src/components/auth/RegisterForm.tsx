@@ -36,6 +36,7 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
       await signUp(email, password, displayName);
       onSuccess?.();
     } catch (err) {
+      console.error('[RegisterForm] signUp error:', err);
       const error = err as { code?: string; message?: string };
       if (error.code === 'auth/email-already-in-use') {
         setError('An account with this email already exists');

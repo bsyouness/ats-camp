@@ -6,6 +6,7 @@ import {
   GoogleAuthProvider,
   signOut as firebaseSignOut,
   updateProfile,
+  sendPasswordResetEmail,
 } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { auth, functions } from './firebase';
@@ -54,17 +55,24 @@ async function persistLoginMethodIfMissing(user: User | null, method: LoginMetho
 
 export async function signUp(email: string, password: string, displayName: string) {
   const normalizedEmail = normalizeEmail(email);
+
+  // Create the Firebase Auth user first — this signs them in, enabling Firestore reads below.
+  // auth/email-already-in-use is thrown here for existing email+password or Google accounts.
+  const userCredential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
+
+  await updateProfile(userCredential.user, { displayName });
+
+  // Now authenticated: check if a Firestore doc already exists (e.g. a HubID account with
+  // the same email that Firebase Auth wasn't aware of).
   const existingUser = await getUserByEmail(normalizedEmail);
   if (existingUser) {
+    await firebaseSignOut(auth);
+    await userCredential.user.delete();
     const method = existingUser.loginMethod ?? 'email';
     throw new AuthMethodError(
       `An account with this email already exists and uses ${getLoginMethodLabel(method)}.`,
     );
   }
-
-  const userCredential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
-
-  await updateProfile(userCredential.user, { displayName });
 
   await createUser({
     uid: userCredential.user.uid,
@@ -130,6 +138,10 @@ export async function signInWithGoogle() {
 
 export async function signOut() {
   await firebaseSignOut(auth);
+}
+
+export async function resetPassword(email: string) {
+  await sendPasswordResetEmail(auth, normalizeEmail(email));
 }
 
 export async function signInWithHubId(email: string, password: string) {
