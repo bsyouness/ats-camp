@@ -37,13 +37,13 @@ async function main() {
   const userDoc = snapshot.docs[0];
   const current = userDoc.data();
 
-  if (current.role === 'admin') {
-    console.log(`${email} (uid: ${userDoc.id}) is already an admin.`);
+  if (current.role === 'admin' && current.approved !== false) {
+    console.log(`${email} (uid: ${userDoc.id}) is already an approved admin.`);
     process.exit(0);
   }
 
-  await userDoc.ref.update({ role: 'admin' });
-  console.log(`Done. ${email} (uid: ${userDoc.id}) is now an admin.`);
+  await userDoc.ref.update({ role: 'admin', approved: true });
+  console.log(`Done. ${email} (uid: ${userDoc.id}) is now an approved admin.`);
 }
 
 main().catch((err) => {
