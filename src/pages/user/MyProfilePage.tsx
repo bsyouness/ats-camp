@@ -218,6 +218,10 @@ function PhotoPickerModal({
             {isDragging ? 'Drop photo here' : preview ? 'Choose different photo' : 'Choose photo'}
           </Button>
 
+          {!preview && !isDragging && (
+            <p className="text-gray-500 text-xs">or drag a photo here</p>
+          )}
+
           {preview && (
             <>
               {error && (

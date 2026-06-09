@@ -164,6 +164,7 @@ export function CampMapPage() {
             >
               {uploadStatus === 'uploading' ? 'Uploading…' : 'Upload Camp Map'}
             </Button>
+            <p className="text-gray-500 text-sm mt-3">or drag an image anywhere onto this page</p>
           </>
         )}
       </div>
@@ -189,7 +190,7 @@ export function CampMapPage() {
           </p>
         </div>
         {isAdmin && (
-          <>
+          <div className="flex flex-col items-end gap-1">
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
             <Button
               variant="secondary"
@@ -199,7 +200,8 @@ export function CampMapPage() {
             >
               {uploadStatus === 'uploading' ? 'Uploading…' : 'Replace Map'}
             </Button>
-          </>
+            <p className="text-gray-500 text-xs">or drag an image onto the page</p>
+          </div>
         )}
       </div>
 

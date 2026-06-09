@@ -145,12 +145,15 @@ export function MediaPage() {
             onChange={handleFileSelect}
             className="hidden"
           />
-          <Button
-            onClick={() => fileInputRef.current?.click()}
-            isLoading={uploading}
-          >
-            {compressing ? 'Compressing...' : uploading ? 'Uploading...' : 'Upload'}
-          </Button>
+          <div className="flex flex-col items-center gap-1">
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              isLoading={uploading}
+            >
+              {compressing ? 'Compressing...' : uploading ? 'Uploading...' : 'Upload'}
+            </Button>
+            <p className="text-gray-500 text-xs whitespace-nowrap">or drag a file onto the page</p>
+          </div>
         </div>
       </div>
 
