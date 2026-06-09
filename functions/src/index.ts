@@ -4,10 +4,8 @@ import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
 import { onObjectFinalized } from 'firebase-functions/v2/storage';
-import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
-import sgMail = require('@sendgrid/mail');
 
 admin.initializeApp();
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
@@ -156,6 +154,7 @@ export const deleteUserCompletely = functions.https.onCall(async (request) => {
   const db = admin.firestore();
 
   try {
+    await admin.auth().revokeRefreshTokens(uid);
     await admin.auth().deleteUser(uid);
   } catch (error) {
     const err = error as { code?: string };
@@ -292,105 +291,3 @@ export const onVideoUploaded = onObjectFinalized(async (event) => {
     if (fs.existsSync(tmpOutput)) fs.unlinkSync(tmpOutput);
   }
 });
-
-// ── Expiry reminder emails (daily 08:00 UTC) ──────────────────────────────────
-
-export const sendMediaExpiryReminders = onSchedule(
-  { schedule: '0 8 * * *', timeZone: 'UTC' },
-  async () => {
-    const apiKey = process.env.SENDGRID_API_KEY;
-    if (!apiKey) {
-      functions.logger.error('SENDGRID_API_KEY not set');
-      return;
-    }
-    sgMail.setApiKey(apiKey);
-
-    const db = admin.firestore();
-    const now = admin.firestore.Timestamp.now();
-    const in31Days = admin.firestore.Timestamp.fromMillis(now.toMillis() + 31 * 24 * 60 * 60 * 1000);
-
-    const snapshot = await db.collection('media')
-      .where('expiresAt', '<=', in31Days)
-      .where('expiresAt', '>', now)
-      .get();
-
-    let sent = 0;
-
-    for (const docSnap of snapshot.docs) {
-      const data = docSnap.data();
-      const expiresAt = data.expiresAt as admin.firestore.Timestamp;
-      const remindersSent: string[] = data.remindersSent || [];
-      const daysLeft = Math.ceil((expiresAt.toMillis() - now.toMillis()) / (1000 * 60 * 60 * 24));
-
-      const thresholds = [
-        { key: '30d', days: 30, subject: 'Your media expires in 30 days — ATS Camp' },
-        { key: '2d', days: 2, subject: 'Reminder: your media expires in 2 days — ATS Camp' },
-      ];
-
-      for (const threshold of thresholds) {
-        if (daysLeft <= threshold.days && !remindersSent.includes(threshold.key)) {
-          const userDoc = await db.collection('users').doc(data.uploadedBy as string).get();
-          const uploaderEmail = userDoc.data()?.email as string | undefined;
-          if (!uploaderEmail) continue;
-
-          const expiryDate = new Date(expiresAt.toMillis()).toLocaleDateString('en-US', {
-            year: 'numeric', month: 'long', day: 'numeric',
-          });
-
-          await sgMail.send({
-            to: uploaderEmail,
-            from: 'noreply@ats-camp.com',
-            subject: threshold.subject,
-            text: `Your uploaded media will expire on ${expiryDate}. Log in to download or re-upload it before it's removed.\n\nhttps://ats-camp.web.app/media`,
-            html: `<p>Your uploaded media will expire on <strong>${expiryDate}</strong>.</p><p>Log in to download or re-upload it before it's removed.</p><p><a href="https://ats-camp.web.app/media">View your media</a></p>`,
-          });
-
-          await docSnap.ref.update({
-            remindersSent: admin.firestore.FieldValue.arrayUnion(threshold.key),
-          });
-
-          sent++;
-        }
-      }
-    }
-
-    functions.logger.info(`Sent ${sent} expiry reminder email(s)`);
-  },
-);
-
-// ── Cleanup expired media (daily 03:00 UTC) ────────────────────────────────────
-
-export const cleanupExpiredMedia = onSchedule(
-  { schedule: '0 3 * * *', timeZone: 'UTC' },
-  async () => {
-    const db = admin.firestore();
-    const now = admin.firestore.Timestamp.now();
-
-    const snapshot = await db.collection('media')
-      .where('expiresAt', '<', now)
-      .get();
-
-    let deleted = 0;
-
-    for (const docSnap of snapshot.docs) {
-      const data = docSnap.data();
-      const bucket = admin.storage().bucket();
-
-      try {
-        const url = data.url as string;
-        const match = url.match(/\/o\/(.+?)\?/);
-        if (match) {
-          const storagePath = decodeURIComponent(match[1]);
-          await bucket.file(storagePath).delete();
-        }
-      } catch (err) {
-        functions.logger.warn(`Could not delete storage file for media ${docSnap.id}:`, err);
-      }
-
-      await docSnap.ref.delete();
-      deleted++;
-    }
-
-    functions.logger.info(`Deleted ${deleted} expired media item(s)`);
-  },
-);
