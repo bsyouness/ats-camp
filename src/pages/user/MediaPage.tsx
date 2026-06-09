@@ -1,37 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { getAllMedia, uploadMedia, getMediaType, deleteMedia } from '../../services/media';
 import { useAuth } from '../../contexts/useAuth';
+import { useFileDrop } from '../../hooks/useFileDrop';
 import { Media } from '../../types';
 import { Card, CardContent, Button, Loading, Modal } from '../../components/ui';
-
-function daysUntil(ts: { toMillis: () => number }): number {
-  const ms = ts.toMillis() - Date.now();
-  return Math.ceil(ms / (1000 * 60 * 60 * 24));
-}
-
-function ExpiryBadge({ expiresAt }: { expiresAt: Media['expiresAt'] }) {
-  const days = daysUntil(expiresAt);
-
-  if (days <= 2) {
-    return (
-      <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-600 text-white">
-        Expires soon!
-      </span>
-    );
-  }
-  if (days <= 30) {
-    return (
-      <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-500 text-white animate-pulse">
-        Expires in {days}d
-      </span>
-    );
-  }
-  return (
-    <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full text-xs bg-black/50 text-gray-300">
-      Expires in {days}d
-    </span>
-  );
-}
 
 export function MediaPage() {
   const { firebaseUser, isAdmin } = useAuth();
@@ -61,9 +33,8 @@ export function MediaPage() {
     }
   }
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !firebaseUser) return;
+  const handleFile = (file: File) => {
+    if (!firebaseUser) return;
 
     const mediaType = getMediaType(file);
     if (!mediaType) {
@@ -74,8 +45,15 @@ export function MediaPage() {
     setPendingFile(file);
     setDescription('');
     setShowUploadDialog(true);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFile(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
+
+  const { isDragging, dropProps } = useFileDrop(handleFile, uploading);
 
   const handleUploadConfirm = async () => {
     if (!pendingFile || !firebaseUser) return;
@@ -97,7 +75,7 @@ export function MediaPage() {
       await fetchMedia();
     } catch (error) {
       console.error('Error uploading media:', error);
-      alert('Failed to upload media');
+      alert(error instanceof Error ? error.message : 'Failed to upload media');
     } finally {
       setUploading(false);
       setCompressing(false);
@@ -134,12 +112,12 @@ export function MediaPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      {/* Expiry info banner */}
-      <div className="mb-6 px-4 py-3 rounded-lg bg-playa-card border border-playa-border text-sm text-gray-300">
-        Media is automatically removed 365 days after upload. You'll receive email reminders 30 and 2 days before expiry.
-      </div>
-
+    <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12" {...dropProps}>
+      {isDragging && (
+        <div className="absolute inset-2 z-20 rounded-xl border-2 border-dashed border-neon-cyan bg-playa-bg/80 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+          <p className="text-neon-cyan text-lg font-semibold">Drop photo or video to upload</p>
+        </div>
+      )}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold text-white mb-2">Media Gallery</h1>
@@ -210,7 +188,6 @@ export function MediaPage() {
               <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/50 rounded text-xs text-white">
                 {item.year}
               </div>
-              {item.expiresAt && <ExpiryBadge expiresAt={item.expiresAt} />}
             </div>
           ))}
         </div>
@@ -268,11 +245,6 @@ export function MediaPage() {
             <div className="mt-4 flex items-center justify-between">
               <div>
                 <span className="text-gray-400 text-sm">{selectedMedia.year}</span>
-                {selectedMedia.expiresAt && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Expires: {new Date(selectedMedia.expiresAt.toMillis()).toLocaleDateString()}
-                  </p>
-                )}
               </div>
               {(isAdmin || selectedMedia.uploadedBy === firebaseUser?.uid) && (
                 <Button

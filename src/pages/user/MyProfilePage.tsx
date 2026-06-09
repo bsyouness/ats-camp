@@ -6,8 +6,12 @@ import { useAuth } from '../../contexts/useAuth';
 import { updateUser } from '../../services/users';
 import { getMyMedia, compressImage } from '../../services/media';
 import { storage } from '../../services/firebase';
+import { withTimeout } from '../../services/async';
+import { useFileDrop } from '../../hooks/useFileDrop';
 import { Button, Input, Card, CardContent, CardHeader, CardTitle, Loading, Modal } from '../../components/ui';
 import { LoginMethod, Media } from '../../types';
+
+const AVATAR_UPLOAD_TIMEOUT_MS = 15000;
 
 // ── Avatar component ──────────────────────────────────────────────────────────
 
@@ -71,6 +75,7 @@ function PhotoPickerModal({
   const [preview, setPreview] = useState<string | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load gallery when switching to that tab
@@ -87,30 +92,51 @@ function PhotoPickerModal({
   function handleClose() {
     setPreview(null);
     setPendingFile(null);
+    setError('');
     setTab('upload');
     onClose();
   }
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  function selectFile(file: File) {
+    setError('');
     setPendingFile(file);
     setPreview(URL.createObjectURL(file));
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) selectFile(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
+
+  const { isDragging, dropProps } = useFileDrop(selectFile, saving);
 
   async function handleUploadConfirm() {
     if (!pendingFile) return;
     setSaving(true);
+    setError('');
     try {
       const compressed = await compressImage(pendingFile);
-      const storageRef = ref(storage, `avatars/${uid}.jpg`);
-      await uploadBytes(storageRef, compressed, { contentType: 'image/jpeg' });
-      const url = await getDownloadURL(storageRef);
-      await onSave(url);
+      const storageRef = ref(storage, `avatars/${uid}-${Date.now()}.jpg`);
+      await withTimeout(
+        uploadBytes(storageRef, compressed, { contentType: 'image/jpeg' }),
+        AVATAR_UPLOAD_TIMEOUT_MS,
+        'Profile photo upload timed out. Storage may not be set up yet.',
+      );
+      const url = await withTimeout(
+        getDownloadURL(storageRef),
+        AVATAR_UPLOAD_TIMEOUT_MS,
+        'Profile photo URL lookup timed out. Please try again.',
+      );
+      await withTimeout(
+        onSave(url),
+        AVATAR_UPLOAD_TIMEOUT_MS,
+        'Profile photo save timed out. Please try again.',
+      );
       handleClose();
     } catch (err) {
       console.error('Avatar upload failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to upload profile photo. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -118,11 +144,13 @@ function PhotoPickerModal({
 
   async function handleGallerySelect(url: string) {
     setSaving(true);
+    setError('');
     try {
       await onSave(url);
       handleClose();
     } catch (err) {
       console.error('Avatar update failed:', err);
+      setError('Failed to update profile photo. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -150,7 +178,12 @@ function PhotoPickerModal({
 
       {/* Upload tab */}
       {tab === 'upload' && (
-        <div className="flex flex-col items-center gap-4">
+        <div
+          className={`flex flex-col items-center gap-4 rounded-lg p-4 transition-colors ${
+            isDragging ? 'bg-neon-cyan/10 ring-2 ring-neon-cyan' : ''
+          }`}
+          {...dropProps}
+        >
           {preview ? (
             <img
               src={preview}
@@ -158,7 +191,9 @@ function PhotoPickerModal({
               className="w-32 h-32 rounded-full object-cover border-2 border-playa-border"
             />
           ) : (
-            <div className="w-32 h-32 rounded-full bg-playa-card border-2 border-dashed border-playa-border flex items-center justify-center text-gray-500">
+            <div className={`w-32 h-32 rounded-full bg-playa-card border-2 border-dashed flex items-center justify-center text-gray-500 ${
+              isDragging ? 'border-neon-cyan' : 'border-playa-border'
+            }`}>
               <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                   d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -180,18 +215,23 @@ function PhotoPickerModal({
             type="button"
             onClick={() => fileInputRef.current?.click()}
           >
-            {preview ? 'Choose different photo' : 'Choose photo'}
+            {isDragging ? 'Drop photo here' : preview ? 'Choose different photo' : 'Choose photo'}
           </Button>
 
           {preview && (
-            <Button
-              type="button"
-              onClick={handleUploadConfirm}
-              isLoading={saving}
-              className="w-full"
-            >
-              {saving ? 'Saving...' : 'Set as profile photo'}
-            </Button>
+            <>
+              {error && (
+                <p className="text-sm text-red-400 text-center">{error}</p>
+              )}
+              <Button
+                type="button"
+                onClick={handleUploadConfirm}
+                isLoading={saving}
+                className="w-full"
+              >
+                {saving ? 'Saving...' : 'Set as profile photo'}
+              </Button>
+            </>
           )}
         </div>
       )}
@@ -334,7 +374,8 @@ export function MyProfilePage() {
 
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
-    } catch {
+    } catch (err) {
+      console.error('Profile update failed:', err);
       setError('Failed to update profile. Please try again.');
     } finally {
       setIsLoading(false);
