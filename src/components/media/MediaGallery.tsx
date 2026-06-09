@@ -26,6 +26,8 @@ export function MediaGallery({ title, subtitle, manage = false }: MediaGalleryPr
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [description, setDescription] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -111,6 +113,37 @@ export function MediaGallery({ title, subtitle, manage = false }: MediaGalleryPr
     }
   };
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    const items = media.filter((m) => selectedIds.has(m.id));
+    if (items.length === 0) return;
+    if (!confirm(`Delete ${items.length} selected item(s)? This cannot be undone.`)) return;
+
+    setBulkDeleting(true);
+    try {
+      const results = await Promise.allSettled(
+        items.map((m) => deleteMedia(m.id, m.url)),
+      );
+      const failed = results.filter((r) => r.status === 'rejected');
+      if (failed.length > 0) {
+        console.error('Some media deletions failed:', failed);
+        alert(`${failed.length} of ${items.length} item(s) could not be deleted.`);
+      }
+      setSelectedIds(new Set());
+      await fetchData();
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   const getUserByUid = (uid: string) => users.find((u) => u.uid === uid);
 
   const formatDate = (timestamp: { toDate: () => Date }) =>
@@ -129,6 +162,18 @@ export function MediaGallery({ title, subtitle, manage = false }: MediaGalleryPr
   const filteredMedia = filterYear === 'all'
     ? media
     : media.filter((m) => m.year === filterYear);
+
+  const allVisibleSelected =
+    filteredMedia.length > 0 && filteredMedia.every((m) => selectedIds.has(m.id));
+
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) filteredMedia.forEach((m) => next.delete(m.id));
+      else filteredMedia.forEach((m) => next.add(m.id));
+      return next;
+    });
+  };
 
   if (loading) {
     return (
@@ -186,6 +231,31 @@ export function MediaGallery({ title, subtitle, manage = false }: MediaGalleryPr
         </div>
       </div>
 
+      {manage && filteredMedia.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 mb-4">
+          <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={allVisibleSelected}
+              onChange={toggleSelectAll}
+              className="w-4 h-4 accent-neon-cyan"
+            />
+            Select all
+          </label>
+          {selectedIds.size > 0 && (
+            <>
+              <span className="text-sm text-gray-400">{selectedIds.size} selected</span>
+              <Button variant="danger" size="sm" onClick={handleBulkDelete} isLoading={bulkDeleting}>
+                Delete selected
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+                Clear
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+
       {filteredMedia.length === 0 ? (
         <Card>
           <CardContent className="text-center py-12">
@@ -196,12 +266,30 @@ export function MediaGallery({ title, subtitle, manage = false }: MediaGalleryPr
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {filteredMedia.map((item) => {
             const uploader = getUserByUid(item.uploadedBy);
+            const isSelected = selectedIds.has(item.id);
             return (
               <div
                 key={item.id}
                 onClick={() => setSelectedMedia(item)}
-                className="group relative aspect-square bg-playa-card rounded-lg overflow-hidden cursor-pointer"
+                className={`group relative aspect-square bg-playa-card rounded-lg overflow-hidden cursor-pointer ${
+                  manage && isSelected ? 'ring-2 ring-neon-cyan' : ''
+                }`}
               >
+                {manage && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); toggleSelect(item.id); }}
+                    aria-label={isSelected ? 'Deselect' : 'Select'}
+                    className={`absolute top-2 left-2 z-10 w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors ${
+                      isSelected
+                        ? 'bg-neon-cyan border-neon-cyan text-playa-bg'
+                        : 'bg-black/40 border-white/70 text-transparent hover:border-white'
+                    }`}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </button>
+                )}
                 {item.type === 'photo' ? (
                   <img
                     src={item.url}
