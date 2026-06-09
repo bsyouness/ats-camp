@@ -72,7 +72,8 @@ export function CampMapPage() {
           fetchData();
         }
       })
-      .catch(() => {
+      .catch((error) => {
+        console.error('Camp map upload failed:', error);
         localStorage.setItem(UPLOAD_STATUS_KEY, 'error');
         backgroundUpload = null;
         if (mountedRef.current) setUploadStatus('error');
