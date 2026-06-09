@@ -75,6 +75,7 @@ async function main() {
   }
 
   try {
+    await admin.auth().revokeRefreshTokens(resolved.uid);
     await admin.auth().deleteUser(resolved.uid);
     console.log(`Deleted Firebase Auth user ${resolved.uid}.`);
   } catch (error) {

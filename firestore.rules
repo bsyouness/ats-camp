@@ -83,11 +83,11 @@ service cloud.firestore {
 
     // Media collection
     match /media/{mediaId} {
-      // Approved users can read all media
-      allow read: if isApprovedUser();
+      // Approved users and admins can read all media
+      allow read: if isApprovedUser() || isAdmin();
 
-      // Approved users can create media
-      allow create: if isApprovedUser() &&
+      // Approved users and admins can create media
+      allow create: if (isApprovedUser() || isAdmin()) &&
         request.resource.data.uploadedBy == request.auth.uid;
 
       // Users can delete their own media, admins can delete any

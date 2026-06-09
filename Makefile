@@ -12,13 +12,13 @@ preview: build
 build:
 	npm run build
 
-# Deploy hosting + Firestore rules to Firebase (requires FIREBASE_TOKEN or firebase login)
+# Deploy hosting + Firestore/Storage rules to Firebase (requires FIREBASE_TOKEN or firebase login)
 deploy: build
-	firebase deploy --only hosting,firestore:rules --project ats-camp
+	firebase deploy --only hosting,firestore:rules,storage --project ats-camp
 
-# Deploy Firestore rules only (no rebuild needed)
+# Deploy Firestore + Storage rules only (no rebuild needed)
 deploy-rules:
-	firebase deploy --only firestore:rules --project ats-camp
+	firebase deploy --only firestore:rules,storage --project ats-camp
 
 # Build and deploy Cloud Functions
 deploy-functions:
