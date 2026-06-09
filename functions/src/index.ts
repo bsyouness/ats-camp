@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
 import { onObjectFinalized } from 'firebase-functions/v2/storage';
+import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import * as ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
 
@@ -289,5 +290,42 @@ export const onVideoUploaded = onObjectFinalized({ region: 'us-east1' }, async (
   } finally {
     if (fs.existsSync(tmpInput)) fs.unlinkSync(tmpInput);
     if (fs.existsSync(tmpOutput)) fs.unlinkSync(tmpOutput);
+  }
+});
+
+// ── Sync admin role to a custom auth claim ─────────────────────────────────────
+// Storage rules authorize admins via the `admin` custom claim (a cross-service
+// Firestore read from Storage rules proved unreliable). This keeps that claim in
+// sync with the user document's `role` field, so promoting/demoting an admin from
+// anywhere (admin UI, scripts, console) just works. The affected user must
+// refresh their token (re-login) for the new claim to take effect.
+
+export const syncAdminClaim = onDocumentWritten('users/{uid}', async (event) => {
+  const uid = event.params.uid;
+  const before = event.data?.before.data();
+  const after = event.data?.after.data();
+
+  // Only act when the role actually changed (ignore unrelated profile edits).
+  const beforeRole = before?.role;
+  const afterRole = after?.role;
+  if (beforeRole === afterRole) return;
+
+  const shouldBeAdmin = afterRole === 'admin';
+
+  try {
+    const user = await admin.auth().getUser(uid);
+    const claims = user.customClaims || {};
+    if ((claims.admin === true) === shouldBeAdmin) return; // already correct
+
+    await admin.auth().setCustomUserClaims(uid, { ...claims, admin: shouldBeAdmin });
+    functions.logger.info(`Set admin=${shouldBeAdmin} claim for user ${uid}`);
+  } catch (error) {
+    const err = error as { code?: string };
+    // The auth user may not exist yet (e.g. doc created before sign-up completes).
+    if (err.code === 'auth/user-not-found') {
+      functions.logger.warn(`No auth user for ${uid}; skipping claim sync`);
+      return;
+    }
+    throw error;
   }
 });
