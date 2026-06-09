@@ -223,7 +223,7 @@ export const signInWithHubId = functions.https.onCall(async (request) => {
 
 // ── Video transcoding ──────────────────────────────────────────────────────────
 
-export const onVideoUploaded = onObjectFinalized(async (event) => {
+export const onVideoUploaded = onObjectFinalized({ region: 'us-east1' }, async (event) => {
   const object = event.data;
   const contentType = object.contentType || '';
   if (!contentType.startsWith('video/')) return;
