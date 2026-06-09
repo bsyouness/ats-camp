@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { getCurrentCampMap, uploadCampMap } from '../../services/campMap';
 import { getAllUsers } from '../../services/users';
 import { useAuth } from '../../contexts/useAuth';
+import { useFileDrop } from '../../hooks/useFileDrop';
 import { CampMap, User } from '../../types';
 import { Card, CardContent, Loading, Button } from '../../components/ui';
 
@@ -57,8 +58,12 @@ export function CampMapPage() {
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !firebaseUser) return;
+    if (file) startUpload(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const startUpload = (file: File) => {
+    if (!file || !firebaseUser) return;
 
     localStorage.setItem(UPLOAD_STATUS_KEY, 'uploading');
     setUploadStatus('uploading');
@@ -84,6 +89,11 @@ export function CampMapPage() {
     localStorage.removeItem(UPLOAD_STATUS_KEY);
     setUploadStatus(null);
   };
+
+  const { isDragging, dropProps } = useFileDrop(
+    startUpload,
+    !isAdmin || uploadStatus === 'uploading',
+  );
 
   const getUserByUid = (uid: string | null) => {
     if (!uid) return null;
@@ -133,7 +143,12 @@ export function CampMapPage() {
 
   if (!campMap) {
     return (
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
+      <div className="relative max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center" {...dropProps}>
+        {isDragging && (
+          <div className="absolute inset-2 z-20 rounded-xl border-2 border-dashed border-neon-cyan bg-playa-bg/80 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+            <p className="text-neon-cyan text-lg font-semibold">Drop image to upload camp map</p>
+          </div>
+        )}
         <UploadBanner />
         <h1 className="text-2xl font-bold text-white mb-4">Camp Map Not Available</h1>
         <p className="text-gray-400 mb-6">
@@ -156,7 +171,12 @@ export function CampMapPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12" {...dropProps}>
+      {isDragging && (
+        <div className="absolute inset-2 z-20 rounded-xl border-2 border-dashed border-neon-cyan bg-playa-bg/80 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+          <p className="text-neon-cyan text-lg font-semibold">Drop image to replace camp map</p>
+        </div>
+      )}
       <UploadBanner />
 
       <div className="mb-8 flex items-start justify-between">
