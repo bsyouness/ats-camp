@@ -6,9 +6,11 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    // Admin is determined by a custom auth claim (set server-side for users
+    // with role 'admin'). This avoids an unreliable cross-service Firestore
+    // read from Storage rules. Requires a token refresh / re-login to take effect.
     function isAdmin() {
-      return isAuthenticated() &&
-        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin';
+      return isAuthenticated() && request.auth.token.admin == true;
     }
 
     match /media/{year}/{userId}/{fileName} {

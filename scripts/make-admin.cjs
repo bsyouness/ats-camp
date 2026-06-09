@@ -35,15 +35,14 @@ async function main() {
   }
 
   const userDoc = snapshot.docs[0];
-  const current = userDoc.data();
 
-  if (current.role === 'admin' && current.approved !== false) {
-    console.log(`${email} (uid: ${userDoc.id}) is already an approved admin.`);
-    process.exit(0);
-  }
-
+  // Firestore doc drives the app UI; the custom claim drives Storage rules.
   await userDoc.ref.update({ role: 'admin', approved: true });
+  const existingClaims = (await admin.auth().getUser(userDoc.id)).customClaims || {};
+  await admin.auth().setCustomUserClaims(userDoc.id, { ...existingClaims, admin: true });
+
   console.log(`Done. ${email} (uid: ${userDoc.id}) is now an approved admin.`);
+  console.log('The user must sign out and back in for the admin claim to take effect.');
 }
 
 main().catch((err) => {
