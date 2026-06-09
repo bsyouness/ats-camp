@@ -7,10 +7,12 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from './firebase';
+import { withTimeout } from './async';
 import { compressImage } from './media';
 import { CampMap, CampSpot } from '../types';
 
 const CAMP_MAPS_COLLECTION = 'campMaps';
+const CAMP_MAP_UPLOAD_TIMEOUT_MS = 20000;
 
 export async function getCampMap(year: number): Promise<CampMap | null> {
   const mapRef = doc(db, CAMP_MAPS_COLLECTION, year.toString());
@@ -35,17 +37,29 @@ export async function uploadCampMap(
 ): Promise<string> {
   const compressed = await compressImage(file);
   const storageRef = ref(storage, `campMaps/${year}/map.jpg`);
-  await uploadBytes(storageRef, compressed, { contentType: 'image/jpeg' });
-  const downloadUrl = await getDownloadURL(storageRef);
+  await withTimeout(
+    uploadBytes(storageRef, compressed, { contentType: 'image/jpeg' }),
+    CAMP_MAP_UPLOAD_TIMEOUT_MS,
+    'Camp map upload timed out. Firebase Storage may not be ready yet.',
+  );
+  const downloadUrl = await withTimeout(
+    getDownloadURL(storageRef),
+    CAMP_MAP_UPLOAD_TIMEOUT_MS,
+    'Camp map URL lookup timed out. Please try again.',
+  );
 
   const mapRef = doc(db, CAMP_MAPS_COLLECTION, year.toString());
-  await setDoc(mapRef, {
-    year,
-    imageUrl: downloadUrl,
-    spots: [],
-    uploadedBy,
-    uploadedAt: Timestamp.now(),
-  });
+  await withTimeout(
+    setDoc(mapRef, {
+      year,
+      imageUrl: downloadUrl,
+      spots: [],
+      uploadedBy,
+      uploadedAt: Timestamp.now(),
+    }),
+    CAMP_MAP_UPLOAD_TIMEOUT_MS,
+    'Camp map save timed out. Please try again.',
+  );
 
   return downloadUrl;
 }

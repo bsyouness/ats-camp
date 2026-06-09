@@ -11,9 +11,18 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from './firebase';
+import { withTimeout } from './async';
 import { Media } from '../types';
 
 const MEDIA_COLLECTION = 'media';
+const MEDIA_UPLOAD_TIMEOUT_MS = 20000;
+
+function describeFirebaseError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return 'Unknown error';
+}
 
 export async function compressImage(file: File): Promise<Blob> {
   return new Promise((resolve, reject) => {
@@ -97,24 +106,48 @@ export async function uploadMedia(data: {
   }
 
   const uploadedAt = Timestamp.now();
-  const expiresAt = Timestamp.fromMillis(uploadedAt.toMillis() + 365 * 24 * 60 * 60 * 1000);
 
-  await uploadBytes(storageRef, uploadFile);
-  const downloadUrl = await getDownloadURL(storageRef);
+  try {
+    await withTimeout(
+      uploadBytes(storageRef, uploadFile),
+      MEDIA_UPLOAD_TIMEOUT_MS,
+      'Media upload timed out. Firebase Storage may not be ready yet.',
+    );
+  } catch (error) {
+    throw new Error(`Could not upload file to Storage: ${describeFirebaseError(error)}`);
+  }
+
+  let downloadUrl: string;
+  try {
+    downloadUrl = await withTimeout(
+      getDownloadURL(storageRef),
+      MEDIA_UPLOAD_TIMEOUT_MS,
+      'Media URL lookup timed out. Please try again.',
+    );
+  } catch (error) {
+    throw new Error(`Could not read uploaded media URL: ${describeFirebaseError(error)}`);
+  }
 
   const mediaRef = collection(db, MEDIA_COLLECTION);
-  const docRef = await addDoc(mediaRef, {
-    type: data.type,
-    url: downloadUrl,
-    thumbnailUrl: null,
-    uploadedBy: data.uploadedBy,
-    uploadedAt,
-    year: data.year,
-    description: data.description,
-    expiresAt,
-    compressed: false,
-    remindersSent: [],
-  });
+  let docRef;
+  try {
+    docRef = await withTimeout(
+      addDoc(mediaRef, {
+        type: data.type,
+        url: downloadUrl,
+        thumbnailUrl: null,
+        uploadedBy: data.uploadedBy,
+        uploadedAt,
+        year: data.year,
+        description: data.description,
+        compressed: false,
+      }),
+      MEDIA_UPLOAD_TIMEOUT_MS,
+      'Media save timed out. Please try again.',
+    );
+  } catch (error) {
+    throw new Error(`Could not save media record: ${describeFirebaseError(error)}`);
+  }
 
   return docRef.id;
 }
