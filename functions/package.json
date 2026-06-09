@@ -2,7 +2,7 @@
   "name": "ats-camp-functions",
   "description": "Cloud Functions for ATS Camp",
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "lib/index.js",
   "scripts": {
