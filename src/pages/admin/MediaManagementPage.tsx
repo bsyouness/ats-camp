@@ -1,33 +1,47 @@
-import { useState, useEffect } from 'react';
-import { getAllMedia, deleteMedia } from '../../services/media';
+import { useState, useEffect, useRef } from 'react';
+import { getAllMedia, deleteMedia, getMediaType, uploadMedia } from '../../services/media';
 import { getAllUsers } from '../../services/users';
+import { useAuth } from '../../contexts/useAuth';
 import { Media, User } from '../../types';
 import { Card, CardContent, Button, Loading, Modal } from '../../components/ui';
 
 export function MediaManagementPage() {
+  const { firebaseUser } = useAuth();
   const [media, setMedia] = useState<Media[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMedia, setSelectedMedia] = useState<Media | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [compressing, setCompressing] = useState(false);
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [description, setDescription] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchData();
   }, []);
 
   async function fetchData() {
-    try {
-      const [mediaData, usersData] = await Promise.all([
-        getAllMedia(),
-        getAllUsers(),
-      ]);
-      setMedia(mediaData);
-      setUsers(usersData);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    } finally {
-      setLoading(false);
+    const [mediaResult, usersResult] = await Promise.allSettled([
+      getAllMedia(),
+      getAllUsers(),
+    ]);
+
+    if (mediaResult.status === 'fulfilled') {
+      setMedia(mediaResult.value);
+    } else {
+      console.error('Error fetching media:', mediaResult.reason);
     }
+
+    if (usersResult.status === 'fulfilled') {
+      setUsers(usersResult.value);
+    } else {
+      console.error('Error fetching users:', usersResult.reason);
+    }
+
+    setLoading(false);
   }
 
   const handleDelete = async (mediaItem: Media) => {
@@ -43,6 +57,51 @@ export function MediaManagementPage() {
       alert('Failed to delete media');
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !firebaseUser) return;
+
+    const mediaType = getMediaType(file);
+    if (!mediaType) {
+      alert('Please select an image or video file');
+      return;
+    }
+
+    setPendingFile(file);
+    setDescription('');
+    setShowUploadDialog(true);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleUploadConfirm = async () => {
+    if (!pendingFile || !firebaseUser) return;
+
+    const mediaType = getMediaType(pendingFile)!;
+    setShowUploadDialog(false);
+
+    if (mediaType === 'photo') setCompressing(true);
+    setUploading(true);
+
+    try {
+      await uploadMedia({
+        file: pendingFile,
+        type: mediaType,
+        description,
+        year: new Date().getFullYear(),
+        uploadedBy: firebaseUser.uid,
+      });
+      await fetchData();
+    } catch (error) {
+      console.error('Error uploading media:', error);
+      alert(error instanceof Error ? error.message : 'Failed to upload media');
+    } finally {
+      setUploading(false);
+      setCompressing(false);
+      setPendingFile(null);
+      setDescription('');
     }
   };
 
@@ -68,9 +127,27 @@ export function MediaManagementPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">Media Management</h1>
-        <p className="text-gray-400">Moderate and manage uploaded media ({media.length} items)</p>
+      <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-white mb-2">Media Management</h1>
+          <p className="text-gray-400">Moderate and manage uploaded media ({media.length} items)</p>
+        </div>
+
+        <div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,video/*"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+          <Button
+            onClick={() => fileInputRef.current?.click()}
+            isLoading={uploading}
+          >
+            {compressing ? 'Compressing...' : uploading ? 'Uploading...' : 'Upload Media'}
+          </Button>
+        </div>
       </div>
 
       {media.length === 0 ? (
@@ -114,6 +191,37 @@ export function MediaManagementPage() {
           })}
         </div>
       )}
+
+      {/* Upload dialog */}
+      <Modal
+        isOpen={showUploadDialog}
+        onClose={() => { setShowUploadDialog(false); setPendingFile(null); }}
+        size="sm"
+      >
+        <div>
+          <h2 className="text-lg font-semibold text-white mb-4">Upload media</h2>
+          {pendingFile && (
+            <p className="text-sm text-gray-400 mb-4 truncate">{pendingFile.name}</p>
+          )}
+          <label className="block text-sm text-gray-300 mb-1">Description (optional)</label>
+          <input
+            type="text"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Add a caption..."
+            className="w-full px-3 py-2 bg-playa-surface border border-playa-border rounded-lg text-gray-200 focus:outline-none focus:border-neon-cyan mb-6"
+          />
+          <div className="flex gap-3 justify-end">
+            <Button
+              variant="ghost"
+              onClick={() => { setShowUploadDialog(false); setPendingFile(null); }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleUploadConfirm}>Upload</Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Media Detail Modal */}
       <Modal
