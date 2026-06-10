@@ -80,13 +80,17 @@ export async function getAllMedia(): Promise<Media[]> {
 
 export async function getMyMedia(uid: string): Promise<Media[]> {
   const mediaRef = collection(db, MEDIA_COLLECTION);
-  const q = query(mediaRef, where('uploadedBy', '==', uid), orderBy('uploadedAt', 'desc'));
+  // Equality-only query avoids needing a composite (uploadedBy + uploadedAt) index;
+  // sort client-side instead.
+  const q = query(mediaRef, where('uploadedBy', '==', uid));
   const snapshot = await getDocs(q);
 
-  return snapshot.docs.map((doc) => ({
+  const items = snapshot.docs.map((doc) => ({
     id: doc.id,
     ...doc.data(),
   })) as Media[];
+
+  return items.sort((a, b) => b.uploadedAt.toMillis() - a.uploadedAt.toMillis());
 }
 
 export async function uploadMedia(data: {
