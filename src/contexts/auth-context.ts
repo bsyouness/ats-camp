@@ -9,6 +9,8 @@ export interface AuthContextType {
   isAdmin: boolean;
   previewAsUser: boolean;
   setPreviewAsUser: (v: boolean) => void;
+  /** Re-fetch the current user's Firestore profile into context (e.g. after an edit). */
+  refreshUser: () => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);

@@ -284,7 +284,7 @@ function PhotoPickerModal({
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function MyProfilePage() {
-  const { user, firebaseUser } = useAuth();
+  const { user, firebaseUser, refreshUser } = useAuth();
   const { hash } = useLocation();
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -341,6 +341,8 @@ export function MyProfilePage() {
     await updateUser(firebaseUser.uid, { photoURL: url });
     await updateProfile(firebaseUser, { photoURL: url });
     setCurrentPhotoURL(url);
+    // Refresh context so the navbar avatar updates and the change survives remounts.
+    await refreshUser();
   }
 
   const handleSubmit = async (e: FormEvent) => {
@@ -375,6 +377,7 @@ export function MyProfilePage() {
       });
 
       await updateProfile(firebaseUser, { displayName });
+      await refreshUser();
 
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);

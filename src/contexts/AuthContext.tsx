@@ -48,6 +48,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPreviewAsUserState(v);
   }
 
+  async function refreshUser() {
+    if (!auth.currentUser) return;
+    try {
+      const userData = await getUser(auth.currentUser.uid);
+      if (userData) setUser(userData);
+    } catch (error) {
+      console.error('Error refreshing user data:', error);
+    }
+  }
+
   const value: AuthContextType = {
     firebaseUser,
     user,
@@ -55,6 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAdmin: user?.role === 'admin' && user?.approved !== false && !previewAsUser,
     previewAsUser,
     setPreviewAsUser,
+    refreshUser,
   };
 
   return (
