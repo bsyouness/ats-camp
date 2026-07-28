@@ -1,6 +1,7 @@
-import { useState, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { signIn, signInWithHubId } from '../../services/auth';
+import { clearAuthNotice } from '../../services/auth-notice';
 import { Button, Input } from '../ui';
 import { GoogleSignInButton } from './GoogleSignInButton';
 
@@ -8,18 +9,26 @@ type LoginMethod = 'email' | 'hubid';
 
 interface LoginFormProps {
   onSuccess?: () => void;
+  /** Reason a previous attempt failed, carried across the redirect back to this page. */
+  initialError?: string;
 }
 
-export function LoginForm({ onSuccess }: LoginFormProps) {
+export function LoginForm({ onSuccess, initialError = '' }: LoginFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(initialError);
   const [isLoading, setIsLoading] = useState(false);
   const [loginMethod, setLoginMethod] = useState<LoginMethod>('email');
+
+  // A failure recorded after this form mounted (the redirect can land first).
+  useEffect(() => {
+    if (initialError) setError(initialError);
+  }, [initialError]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+    clearAuthNotice();
     setIsLoading(true);
 
     try {
@@ -44,6 +53,15 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
       </div>
 
       <div className="bg-playa-surface border border-playa-border rounded-xl p-8">
+        {error && (
+          <p
+            role="alert"
+            className="mb-6 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-400"
+          >
+            {error}
+          </p>
+        )}
+
         <GoogleSignInButton
           onSuccess={onSuccess}
           onError={(err) => setError(err.message)}
@@ -109,10 +127,6 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
                 Forgot password?
               </Link>
             </div>
-          )}
-
-          {error && (
-            <p className="text-red-400 text-sm">{error}</p>
           )}
 
           <Button type="submit" className="w-full" isLoading={isLoading}>

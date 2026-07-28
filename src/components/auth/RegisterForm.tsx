@@ -1,24 +1,33 @@
-import { useState, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { signUp } from '../../services/auth';
+import { clearAuthNotice } from '../../services/auth-notice';
 import { Button, Input } from '../ui';
 import { GoogleSignInButton } from './GoogleSignInButton';
 
 interface RegisterFormProps {
   onSuccess?: () => void;
+  /** Reason a previous attempt failed, carried across the redirect back to this page. */
+  initialError?: string;
 }
 
-export function RegisterForm({ onSuccess }: RegisterFormProps) {
+export function RegisterForm({ onSuccess, initialError = '' }: RegisterFormProps) {
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(initialError);
   const [isLoading, setIsLoading] = useState(false);
+
+  // A failure recorded after this form mounted (the redirect can land first).
+  useEffect(() => {
+    if (initialError) setError(initialError);
+  }, [initialError]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+    clearAuthNotice();
 
     if (password !== confirmPassword) {
       setError('Passwords do not match');
@@ -58,6 +67,15 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
       </div>
 
       <div className="bg-playa-surface border border-playa-border rounded-xl p-8">
+        {error && (
+          <p
+            role="alert"
+            className="mb-6 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-400"
+          >
+            {error}
+          </p>
+        )}
+
         <GoogleSignInButton
           onSuccess={onSuccess}
           onError={(err) => setError(err.message)}
@@ -108,10 +126,6 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
             onChange={(e) => setConfirmPassword(e.target.value)}
             required
           />
-
-          {error && (
-            <p className="text-red-400 text-sm">{error}</p>
-          )}
 
           <Button type="submit" className="w-full" isLoading={isLoading}>
             Create Account

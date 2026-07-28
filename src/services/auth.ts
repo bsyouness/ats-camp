@@ -10,7 +10,8 @@ import {
 } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { auth, functions } from './firebase';
-import { createUser, getUser, getUserByEmail, updateUser } from './users';
+import { createUser, getUser, updateUser } from './users';
+import { clearAuthNotice, setAuthNotice } from './auth-notice';
 import { LoginMethod, User } from '../types';
 
 const googleProvider = new GoogleAuthProvider();
@@ -26,6 +27,47 @@ class AuthMethodError extends Error {
     super(message);
     this.name = 'AuthMethodError';
   }
+}
+
+/**
+ * Firebase notifies auth observers as soon as the credential is accepted, which is
+ * before a sign-up flow has written its Firestore profile doc. Sign-in flows register
+ * here so the auth listener can wait them out instead of mistaking that gap for a
+ * profile-less session.
+ */
+let pendingSignIn: Promise<void> | null = null;
+
+function trackSignIn<T>(run: () => Promise<T>): Promise<T> {
+  const promise = run();
+  const settled = promise.then(
+    () => {
+      clearAuthNotice();
+    },
+    (error: unknown) => {
+      // The form that called us may already be unmounted by the redirect, so the
+      // reason is parked where the remounted login page will find it.
+      console.error('[auth] Sign-in failed:', error);
+      setAuthNotice(
+        error instanceof Error && error.message
+          ? error.message
+          : 'Sign-in failed. Please try again.',
+      );
+    },
+  );
+
+  pendingSignIn = settled;
+  void settled.then(() => {
+    if (pendingSignIn === settled) {
+      pendingSignIn = null;
+    }
+  });
+
+  return promise;
+}
+
+/** Resolves once any in-flight sign-in has finished creating/validating its profile. */
+export function awaitPendingSignIn(): Promise<void> {
+  return pendingSignIn ?? Promise.resolve();
 }
 
 function normalizeEmail(email: string): string {
@@ -66,12 +108,22 @@ async function tryLookupAccountByEmail(email: string): Promise<{ exists: boolean
   try {
     return await lookupAccountByEmail(email);
   } catch (error) {
-    console.warn('Login method precheck unavailable, falling back to post-auth validation.', error);
+    // Non-fatal by design, but it silently disables the duplicate-email guard —
+    // loud enough to spot in the console when the callable is misconfigured.
+    console.error(
+      '[auth] getLoginMethodForEmail is unreachable; the duplicate-email guard is ' +
+        'disabled for this sign-in. Check the callable is deployed and publicly invocable.',
+      error,
+    );
     return null;
   }
 }
 
-export async function signUp(email: string, password: string, displayName: string) {
+export function signUp(email: string, password: string, displayName: string) {
+  return trackSignIn(() => runSignUp(email, password, displayName));
+}
+
+async function runSignUp(email: string, password: string, displayName: string) {
   const normalizedEmail = normalizeEmail(email);
   const existingAccount = await tryLookupAccountByEmail(normalizedEmail);
   if (existingAccount?.exists) {
@@ -95,7 +147,11 @@ export async function signUp(email: string, password: string, displayName: strin
   return userCredential.user;
 }
 
-export async function signIn(email: string, password: string) {
+export function signIn(email: string, password: string) {
+  return trackSignIn(() => runSignIn(email, password));
+}
+
+async function runSignIn(email: string, password: string) {
   const normalizedEmail = normalizeEmail(email);
   const existingAccount = await tryLookupAccountByEmail(normalizedEmail);
   if (existingAccount?.exists && existingAccount.loginMethod && existingAccount.loginMethod !== 'email') {
@@ -105,24 +161,50 @@ export async function signIn(email: string, password: string) {
   }
 
   const userCredential = await signInWithEmailAndPassword(auth, normalizedEmail, password);
-  const existingUser = existingAccount?.uid
-    ? await getUser(existingAccount.uid)
-    : await getUserByEmail(normalizedEmail);
+  // Read by uid: rules always let owners read their own doc, whereas the by-email
+  // query requires approval — which a pending user does not have.
+  const existingUser = await getUser(userCredential.user.uid);
 
-  if (existingUser) {
-    try {
-      await ensureLoginMethod(existingUser, 'email');
-    } catch (error) {
+  if (!existingUser) {
+    if (existingAccount?.exists && existingAccount.uid !== userCredential.user.uid) {
+      // Another account already owns this email; creating a second doc would
+      // duplicate it. Bail rather than fork the identity.
       await firebaseSignOut(auth);
-      throw error;
+      throw new AuthMethodError(
+        `This email is already registered with ${getLoginMethodLabel(existingAccount.loginMethod ?? 'email')}.`,
+      );
     }
+
+    // Authenticated, but sign-up never wrote the profile doc. Repair it here so a
+    // half-finished registration isn't a permanent lockout.
+    console.warn(`[auth] Missing profile for uid ${userCredential.user.uid}; creating it now.`);
+    await createUser({
+      uid: userCredential.user.uid,
+      email: normalizedEmail,
+      displayName: userCredential.user.displayName || normalizedEmail.split('@')[0],
+      photoURL: userCredential.user.photoURL,
+      loginMethod: 'email',
+    });
+
+    return userCredential.user;
+  }
+
+  try {
+    await ensureLoginMethod(existingUser, 'email');
+  } catch (error) {
+    await firebaseSignOut(auth);
+    throw error;
   }
 
   await persistLoginMethodIfMissing(existingUser, 'email');
   return userCredential.user;
 }
 
-export async function signInWithGoogle() {
+export function signInWithGoogle() {
+  return trackSignIn(runGoogleSignIn);
+}
+
+async function runGoogleSignIn() {
   const userCredential = await signInWithPopup(auth, googleProvider);
   const email = userCredential.user.email;
   if (!email) {
@@ -131,9 +213,11 @@ export async function signInWithGoogle() {
   }
 
   const existingUser = await getUser(userCredential.user.uid);
-  const existingAccountByEmail = await lookupAccountByEmail(email);
+  // Best-effort like the other flows: an unreachable precheck must not strand a
+  // freshly authenticated user without a profile doc.
+  const existingAccountByEmail = await tryLookupAccountByEmail(email);
 
-  if (existingAccountByEmail.exists && existingAccountByEmail.uid !== userCredential.user.uid) {
+  if (existingAccountByEmail?.exists && existingAccountByEmail.uid !== userCredential.user.uid) {
     const method = existingAccountByEmail.loginMethod ?? 'email';
     await firebaseSignOut(auth);
     throw new AuthMethodError(
@@ -170,7 +254,11 @@ export async function resetPassword(email: string) {
   await sendPasswordResetEmail(auth, normalizeEmail(email));
 }
 
-export async function signInWithHubId(email: string, password: string) {
+export function signInWithHubId(email: string, password: string) {
+  return trackSignIn(() => runHubIdSignIn(email, password));
+}
+
+async function runHubIdSignIn(email: string, password: string) {
   const normalizedEmail = normalizeEmail(email);
   const existingAccount = await tryLookupAccountByEmail(normalizedEmail);
   if (existingAccount?.exists && existingAccount.loginMethod && existingAccount.loginMethod !== 'hubid') {
